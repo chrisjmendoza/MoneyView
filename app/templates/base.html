@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MoneyView</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f2e8;
+        --card: #fffdf8;
+        --ink: #22201b;
+        --muted: #746c61;
+        --accent: #0f766e;
+        --accent-soft: #d8f3ef;
+        --line: #ddd3c5;
+        --warn: #b45309;
+      }
+
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 30%),
+          linear-gradient(180deg, #fbf7f0 0%, var(--bg) 100%);
+        color: var(--ink);
+      }
+
+      header,
+      main {
+        width: min(1100px, calc(100vw - 2rem));
+        margin: 0 auto;
+      }
+
+      header {
+        padding: 2rem 0 1rem;
+      }
+
+      nav {
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      nav a {
+        color: var(--ink);
+        text-decoration: none;
+        padding: 0.45rem 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.6);
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 0.8rem;
+        font-weight: 600;
+      }
+
+      p {
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .cards {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 1rem;
+        box-shadow: 0 12px 32px rgba(34, 32, 27, 0.06);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+
+      form.inline {
+        display: inline;
+      }
+
+      input,
+      select,
+      button,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        font: inherit;
+        background: #fff;
+      }
+
+      button {
+        cursor: pointer;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+      }
+
+      .stack {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .mt-1 {
+        margin-top: 1rem;
+      }
+
+      .mb-2 {
+        margin-bottom: 2rem;
+      }
+
+      .two-col-wide {
+        grid-template-columns: 2fr 1fr;
+      }
+
+      .two-col-even {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .warning {
+        color: var(--warn);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>MoneyView</h1>
+      <p>Generic local-first finance CSV dashboard.</p>
+      <nav>
+        <a href="/">Dashboard</a>
+        <a href="/import">Import</a>
+        <a href="/review">Review Queue</a>
+      </nav>
+    </header>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </body>
+</html>

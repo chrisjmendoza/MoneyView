@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <section class="card stack">
+    <h2>Import CSV</h2>
+    <form method="post" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="action" value="preview">
+      <label>Account</label>
+      <select name="account_id" required>
+        {% for account in accounts %}
+          <option value="{{ account.id }}" {% if form_state.account_id == account.id %}selected{% endif %}>{{ account.name }} ({{ account.institution }})</option>
+        {% endfor %}
+      </select>
+      <label>Import profile</label>
+      <select name="profile_id" required>
+        {% for profile in profiles %}
+          <option value="{{ profile.id }}" {% if form_state.profile_id == profile.id %}selected{% endif %}>{{ profile.institution }} - {{ profile.name }}</option>
+        {% endfor %}
+      </select>
+      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <button type="submit">Preview First 5 Rows</button>
+    </form>
+
+    {% if preview_rows %}
+      <h3>Preview</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Raw Row</th>
+            <th>Txn Date</th>
+            <th>Posted Date</th>
+            <th>Description</th>
+            <th>Amount</th>
+            <th>Direction</th>
+            <th>Account</th>
+            <th>Hash</th>
+            <th>Matched Rule</th>
+            <th>Category</th>
+            <th>Class</th>
+            <th>Needs Review</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview_rows %}
+            <tr>
+              <td>{{ row.row_number }}</td>
+              <td>{{ row.transaction_date }}</td>
+              <td>{{ row.posted_date or "--" }}</td>
+              <td>{{ row.description }}</td>
+              <td>${{ row.amount }}</td>
+              <td>{{ row.direction }}</td>
+              <td>{{ row.account_name }}</td>
+              <td><span class="muted">{{ row.transaction_hash[:14] }}...</span></td>
+              <td>{{ row.matched_rule or "--" }}</td>
+              <td>{{ row.category_name or "--" }}</td>
+              <td>{{ row.transaction_class }}</td>
+              <td>{% if row.needs_review %}<span class="warning">Needs review</span>{% else %}Ready{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <form method="post" class="stack">
+        <input type="hidden" name="action" value="import">
+        <input type="hidden" name="account_id" value="{{ form_state.account_id }}">
+        <input type="hidden" name="profile_id" value="{{ form_state.profile_id }}">
+        <input type="hidden" name="source_file_name" value="{{ form_state.source_file_name }}">
+        <input type="hidden" name="file_payload" value="{{ form_state.file_payload }}">
+        <button type="submit">Import Transactions</button>
+      </form>
+    {% endif %}
+
+    {% if report %}
+      <h3>Import Report</h3>
+      <table>
+        <tbody>
+          <tr><th>Rows read</th><td>{{ report.rows_read }}</td></tr>
+          <tr><th>New transactions</th><td>{{ report.new_transactions }}</td></tr>
+          <tr><th>Duplicates skipped</th><td>{{ report.duplicates_skipped }}</td></tr>
+          <tr><th>Errors</th><td>{{ report.errors|length }}</td></tr>
+          <tr><th>Needs review count</th><td>{{ report.needs_review_count }}</td></tr>
+        </tbody>
+      </table>
+      {% if report.errors %}
+        <p class="warning">{{ report.errors|join('; ') }}</p>
+      {% endif %}
+
+      {% if report.debug_report %}
+        <h3>Developer Debug Report</h3>
+        <table>
+          <tbody>
+            <tr><th>Imported file name</th><td>{{ report.debug_report.imported_file_name }}</td></tr>
+            <tr><th>Selected account</th><td>{{ report.debug_report.selected_account }}</td></tr>
+            <tr><th>Selected import profile</th><td>{{ report.debug_report.selected_import_profile }}</td></tr>
+            <tr><th>Date range detected</th><td>{{ report.debug_report.date_range_detected.start or "--" }} to {{ report.debug_report.date_range_detected.end or "--" }}</td></tr>
+            <tr><th>Total rows read</th><td>{{ report.debug_report.total_rows_read }}</td></tr>
+            <tr><th>New transactions inserted</th><td>{{ report.debug_report.new_transactions_inserted }}</td></tr>
+            <tr><th>Duplicates skipped</th><td>{{ report.debug_report.duplicates_skipped }}</td></tr>
+            <tr><th>Errors</th><td>{{ report.debug_report.errors.count }}</td></tr>
+            <tr><th>Inflow total</th><td>${{ "%.2f"|format(report.debug_report.inflow_total or 0) }}</td></tr>
+            <tr><th>Outflow total</th><td>${{ "%.2f"|format(report.debug_report.outflow_total or 0) }}</td></tr>
+            <tr><th>Net total</th><td>${{ "%.2f"|format(report.debug_report.net_total or 0) }}</td></tr>
+            <tr><th>Transactions needing review</th><td>{{ report.debug_report.transactions_needing_review }}</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Top 20 Raw Descriptions by Frequency</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Raw Description</th>
+              <th>Frequency</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in report.debug_report.top_raw_descriptions_by_frequency %}
+              <tr>
+                <td>{{ item.raw_description }}</td>
+                <td>{{ item.frequency }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="2">No rows.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <h4>Top 20 Merchant/Descriptions by Total Spend</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Merchant/Description</th>
+              <th>Total Spend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in report.debug_report.top_merchants_by_total_spend %}
+              <tr>
+                <td>{{ item.label }}</td>
+                <td>${{ "%.2f"|format(item.total_spend or 0) }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="2">No spend rows.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    {% endif %}
+  </section>
+{% endblock %}
