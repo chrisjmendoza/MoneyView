@@ -5,6 +5,18 @@ Daily running journal of work completed on MoneyView.
 ## 2026-06-20
 
 ### Stuff Done
+- Conducted a multi-perspective codebase analysis (user, developer, engineer, financial expert) covering correctness, UX gaps, security, and financial modeling accuracy.
+- Created `TODO.md` as a prioritized improvement backlog organized into five tiers.
+- Added `PRAGMA journal_mode = WAL` to the database connection so concurrent reads no longer block during development.
+- Replaced Python `hash()`-based IDs for bills, contacts, and balance snapshots with `uuid4()` — hash-based IDs are not stable across Python runs and have collision risk.
+- Moved `SECRET_KEY` out of source code. On first run the app auto-generates a random 32-byte key and persists it to `data/.secret_key` (gitignored); subsequent runs reuse it silently. The `SECRET_KEY` environment variable overrides the file for networked deployments. Eliminates the startup warning while ensuring sessions are stable across restarts.
+- Fixed the categorization rule upsert from `INSERT OR REPLACE` to `INSERT ... ON CONFLICT DO UPDATE SET`, which preserves `created_at` (REPLACE deletes then inserts, silently dropping the timestamp).
+- Added flash messages to all form POST handlers (balance, settings, bill, contact, update_review) and a flash message display block to the base template so users get feedback after every save.
+- Built `/rules` — a rules management page that lists all categorization rules with their priority, pattern, match type, category, and class. Each rule has an inline edit form, an enable/disable toggle, and a delete button with confirmation.
+- Built `/transactions` — a transaction browser for viewing and re-classifying any imported transaction, not just ones flagged for review. Supports filtering by account, class, category, description search, and date range, with pagination and an inline edit form on each row including a "keep in review queue" checkbox.
+- Built `/bills` — a dedicated recurring bills management page with a create form, inline edit form per bill, delete confirmation, and active/inactive toggle. Bills are used by the safe-to-spend calculation.
+- Added Rules, Transactions, and Bills to the site nav in `base.html`.
+- Updated README with the new pages table, configuration section, current status summary, and revised roadmap.
 - Got the GitHub repo going: https://github.com/chrisjmendoza/MoneyView
 - Added the first project README with setup, run, test, import, and privacy instructions.
 - Expanded the README with a roadmap and development notes so the GitHub repo has clearer project direction.

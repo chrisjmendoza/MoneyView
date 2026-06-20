@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-review">
+
+  <div class="mb-2">
+    <h2 class="section-heading">Transactions</h2>
+    <p class="import-lede">Browse, filter, and re-classify any transaction. Use the review queue for bulk triage.</p>
+  </div>
+
+  {# Filter bar #}
+  <form method="get" action="/transactions" class="card mb-2">
+    <div class="filter-grid" style="grid-template-columns: 1.2fr 1fr 1.4fr 1fr auto auto auto;">
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Account</label>
+        <select name="account_id">
+          <option value="">All accounts</option>
+          {% for acct in accounts %}
+          <option value="{{ acct.id }}" {% if filter_state.account_id == acct.id %}selected{% endif %}>{{ acct.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Class</label>
+        <select name="transaction_class">
+          <option value="">All classes</option>
+          {% for tc in transaction_classes %}
+          <option value="{{ tc }}" {% if filter_state.transaction_class == tc %}selected{% endif %}>{{ tc }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Search description</label>
+        <input type="text" name="search" value="{{ filter_state.search }}" placeholder="e.g. Amazon">
+      </div>
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Category</label>
+        <select name="category_id">
+          <option value="">All categories</option>
+          <option value="__uncategorized__" {% if filter_state.category_id == "__uncategorized__" %}selected{% endif %}>— Uncategorized —</option>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if filter_state.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">From</label>
+        <input type="date" name="date_from" value="{{ filter_state.date_from }}">
+      </div>
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">To</label>
+        <input type="date" name="date_to" value="{{ filter_state.date_to }}">
+      </div>
+      <div style="display:flex; align-items:flex-end; gap:0.4rem;">
+        <button type="submit" style="white-space:nowrap; width:auto; padding:0.65rem 1rem;">Filter</button>
+        <a href="/transactions" style="display:inline-flex; align-items:center; padding:0.65rem 0.85rem; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--muted); text-decoration:none; font-size:0.9rem; white-space:nowrap;">Clear</a>
+      </div>
+    </div>
+    <input type="hidden" name="limit" value="{{ filter_state.limit }}">
+  </form>
+
+  {# Pagination bar #}
+  <div class="pagination-bar mb-2">
+    <p class="muted" style="margin:0; font-size:0.9rem;">
+      {% if total_count %}
+        Showing {{ shown_start }}–{{ shown_end }} of {{ total_count }} transactions
+      {% else %}
+        No transactions match these filters.
+      {% endif %}
+    </p>
+    <div class="pagination-links">
+      {% if pagination.has_previous %}
+        <a href="{{ request.path }}?{{ request.query_string.decode() | replace('page=' ~ pagination.current_page, 'page=' ~ pagination.previous_page) }}">← Prev</a>
+      {% endif %}
+      <span>Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+      {% if pagination.has_next %}
+        <a href="{{ request.path }}?{{ request.query_string.decode() | replace('page=' ~ pagination.current_page, 'page=' ~ pagination.next_page) }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Transaction list #}
+  <div class="review-list">
+    {% for txn in transactions %}
+    <div class="review-card {% if txn.needs_review %}preview-row-review{% endif %}">
+      <div class="review-main-grid">
+
+        {# Left: transaction details #}
+        <div class="review-transaction">
+          <div class="review-headline">
+            <p class="review-amount {% if txn.amount < 0 %}amount-negative{% else %}amount-positive{% endif %}">
+              {% if txn.amount < 0 %}−${{ "%.2f"|format(txn.amount|abs) }}{% else %}+${{ "%.2f"|format(txn.amount) }}{% endif %}
+            </p>
+            <span class="muted" style="font-size:0.85rem; white-space:nowrap;">{{ txn.transaction_date }}</span>
+          </div>
+          <p class="review-description"><strong>{{ txn.merchant or txn.description }}</strong></p>
+          {% if txn.merchant and txn.merchant != txn.description %}
+          <p style="margin:0; color:var(--muted); font-size:0.82rem;">{{ txn.description }}</p>
+          {% endif %}
+          <div class="review-badges">
+            <span>{{ txn.account_name }}</span>
+            <span>{{ txn.transaction_class }}</span>
+            {% if txn.category_name %}<span>{{ txn.category_name }}</span>{% endif %}
+            {% if txn.needs_review %}<span style="background:rgba(180,83,9,0.12); color:var(--warn);">Needs review</span>{% endif %}
+            {% if txn.matched_rule_pattern %}<span title="Matched rule: {{ txn.matched_rule_pattern }}">Rule matched</span>{% endif %}
+          </div>
+          {% if txn.review_note %}
+          <p style="margin:0.35rem 0 0; font-size:0.82rem; color:var(--muted);">{{ txn.review_note }}</p>
+          {% endif %}
+        </div>
+
+        {# Right: edit form #}
+        <form method="post" action="/transactions/{{ txn.id }}/edit" class="review-form">
+          {# Pass current filter state through so redirect preserves filters #}
+          <input type="hidden" name="next_account_id" value="{{ filter_state.account_id }}">
+          <input type="hidden" name="next_transaction_class" value="{{ filter_state.transaction_class }}">
+          <input type="hidden" name="next_search" value="{{ filter_state.search }}">
+          <input type="hidden" name="next_category_id" value="{{ filter_state.category_id }}">
+          <input type="hidden" name="next_date_from" value="{{ filter_state.date_from }}">
+          <input type="hidden" name="next_date_to" value="{{ filter_state.date_to }}">
+          <input type="hidden" name="next_limit" value="{{ filter_state.limit }}">
+          <input type="hidden" name="next_page" value="{{ filter_state.page }}">
+
+          <div class="review-form-grid">
+            <div>
+              <label>Category</label>
+              <select name="category_id">
+                <option value="">— uncategorized —</option>
+                {% for cat in categories %}
+                <option value="{{ cat.id }}" {% if txn.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+              </select>
+              <details class="inline-add-category">
+                <summary>+ New category</summary>
+                <div class="new-category-input">
+                  <input type="text" name="new_category_name" placeholder="Category name">
+                </div>
+              </details>
+            </div>
+            <div>
+              <label>Class</label>
+              <select name="transaction_class" required>
+                {% for tc in transaction_classes %}
+                <option value="{{ tc }}" {% if txn.transaction_class == tc %}selected{% endif %}>{{ tc }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label>Note</label>
+            <textarea name="review_note" rows="2">{{ txn.review_note or "" }}</textarea>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
+            <label class="checkbox-inline" style="font-size:0.82rem;">
+              <input type="checkbox" name="needs_review" value="1" {% if txn.needs_review %}checked{% endif %}>
+              Keep in review queue
+            </label>
+            <button type="submit" style="max-width:10rem;">Save</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+    {% else %}
+    <div class="card" style="text-align:center; padding:2.5rem; color:var(--muted);">
+      No transactions match these filters.
+    </div>
+    {% endfor %}
+  </div>
+
+  {# Bottom pagination #}
+  {% if pagination.total_pages > 1 %}
+  <div class="pagination-bar mt-1">
+    <div class="pagination-links">
+      {% if pagination.has_previous %}
+        <a href="{{ request.path }}?{{ request.query_string.decode() | replace('page=' ~ pagination.current_page, 'page=' ~ pagination.previous_page) }}">← Prev</a>
+      {% endif %}
+      <span>Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+      {% if pagination.has_next %}
+        <a href="{{ request.path }}?{{ request.query_string.decode() | replace('page=' ~ pagination.current_page, 'page=' ~ pagination.next_page) }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

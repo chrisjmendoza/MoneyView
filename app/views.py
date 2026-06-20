@@ -1,7 +1,8 @@
 from datetime import date
 import re
+import uuid
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from .db import get_db
 from .services.categorization_service import create_rule_from_review
@@ -125,7 +126,7 @@ def save_balance() -> str:
         values (?, ?, ?, ?, ?)
         """,
         (
-            f"balance-{abs(hash((request.form['account_id'], request.form['snapshot_date'], request.form['balance'])))}",
+            f"balance-{uuid.uuid4().hex}",
             request.form["account_id"],
             request.form["snapshot_date"],
             request.form["balance"],
@@ -133,6 +134,7 @@ def save_balance() -> str:
         ),
     )
     database.commit()
+    flash("Balance saved.", "success")
     return redirect(url_for("moneyview.dashboard"))
 
 
@@ -155,6 +157,7 @@ def save_settings() -> str:
             (f"setting-{setting_key}", setting_key, request.form[setting_key], "Updated from dashboard."),
         )
     database.commit()
+    flash("Settings saved.", "success")
     return redirect(url_for("moneyview.dashboard"))
 
 
@@ -168,7 +171,7 @@ def create_bill() -> str:
         ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         """,
         (
-            f"bill-{abs(hash((request.form['name'], request.form['due_day'], request.form['expected_amount'])))}",
+            f"bill-{uuid.uuid4().hex}",
             request.form["name"],
             request.form["expected_amount"],
             request.form["due_day"],
@@ -181,6 +184,7 @@ def create_bill() -> str:
         ),
     )
     database.commit()
+    flash(f"Bill \"{request.form['name']}\" added.", "success")
     return redirect(url_for("moneyview.dashboard"))
 
 
@@ -193,7 +197,7 @@ def create_contact() -> str:
         values (?, ?, ?, ?, ?, 1, ?)
         """,
         (
-            f"contact-{abs(hash((request.form['name'], request.form['relationship_type'], request.form.get('default_category_id') or '')))}",
+            f"contact-{uuid.uuid4().hex}",
             request.form["name"].strip(),
             request.form["relationship_type"],
             request.form.get("default_category_id") or None,
@@ -202,6 +206,7 @@ def create_contact() -> str:
         ),
     )
     database.commit()
+    flash(f"Contact \"{request.form['name'].strip()}\" added.", "success")
     return redirect(url_for("moneyview.dashboard"))
 
 
@@ -254,6 +259,287 @@ def import_transactions() -> str:
         selected_profile=selected_profile,
         form_error=form_error,
     )
+
+
+@bp.get("/bills")
+def bills_list() -> str:
+    database = get_db()
+    bills = database.execute(
+        """
+        select recurring_bills.*, categories.name as category_name, accounts.name as account_name
+        from recurring_bills
+        left join categories on categories.id = recurring_bills.category_id
+        left join accounts on accounts.id = recurring_bills.account_id
+        order by recurring_bills.due_day asc, recurring_bills.name asc
+        """
+    ).fetchall()
+    categories = database.execute("select * from categories where active = 1 order by name asc").fetchall()
+    accounts = database.execute("select * from accounts where active = 1 order by name asc").fetchall()
+    return render_template("bills.html", bills=bills, categories=categories, accounts=accounts)
+
+
+@bp.post("/bills/<bill_id>/edit")
+def edit_bill(bill_id: str) -> str:
+    database = get_db()
+    database.execute(
+        """
+        update recurring_bills
+        set name = ?,
+            expected_amount = ?,
+            due_day = ?,
+            frequency = ?,
+            category_id = ?,
+            account_id = ?,
+            is_shared = ?,
+            split_count = ?,
+            active = ?,
+            notes = ?,
+            updated_at = current_timestamp
+        where id = ?
+        """,
+        (
+            request.form["name"],
+            request.form["expected_amount"],
+            request.form["due_day"],
+            request.form["frequency"],
+            request.form.get("category_id") or None,
+            request.form.get("account_id") or None,
+            1 if request.form.get("is_shared") else 0,
+            request.form.get("split_count") or None,
+            1 if request.form.get("active") else 0,
+            request.form.get("notes") or None,
+            bill_id,
+        ),
+    )
+    database.commit()
+    flash(f"Bill \"{request.form['name']}\" updated.", "success")
+    return redirect(url_for("moneyview.bills_list"))
+
+
+@bp.post("/bills/<bill_id>/delete")
+def delete_bill(bill_id: str) -> str:
+    database = get_db()
+    row = database.execute("select name from recurring_bills where id = ?", (bill_id,)).fetchone()
+    database.execute("delete from recurring_bills where id = ?", (bill_id,))
+    database.commit()
+    flash(f"Bill \"{row['name'] if row else bill_id}\" deleted.", "success")
+    return redirect(url_for("moneyview.bills_list"))
+
+
+@bp.get("/transactions")
+def transactions_list() -> str:
+    database = get_db()
+
+    account_id = request.args.get("account_id", "")
+    transaction_class = request.args.get("transaction_class", "")
+    search = request.args.get("search", "").strip()
+    category_id = request.args.get("category_id", "")
+    date_from = request.args.get("date_from", "")
+    date_to = request.args.get("date_to", "")
+    limit = _coerce_positive_int(request.args.get("limit"), 50, max_value=200)
+    page = _coerce_positive_int(request.args.get("page"), 1)
+
+    where_clauses = ["1=1"]
+    params: list = []
+
+    if account_id:
+        where_clauses.append("transactions.account_id = ?")
+        params.append(account_id)
+    if transaction_class:
+        where_clauses.append("transactions.transaction_class = ?")
+        params.append(transaction_class)
+    if search:
+        where_clauses.append("upper(transactions.description) like ?")
+        params.append(f"%{search.upper()}%")
+    if category_id == "__uncategorized__":
+        where_clauses.append("transactions.category_id is null")
+    elif category_id:
+        where_clauses.append("transactions.category_id = ?")
+        params.append(category_id)
+    if date_from:
+        where_clauses.append("transactions.transaction_date >= ?")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("transactions.transaction_date <= ?")
+        params.append(date_to)
+
+    where_sql = " and ".join(where_clauses)
+
+    total_count = database.execute(
+        f"select count(*) as cnt from transactions where {where_sql}", params
+    ).fetchone()["cnt"]
+
+    total_pages = max((total_count - 1) // limit + 1, 1)
+    page = min(page, total_pages)
+    offset = (page - 1) * limit
+
+    transactions = database.execute(
+        f"""
+        select transactions.*, categories.name as category_name, accounts.name as account_name
+        from transactions
+        left join categories on categories.id = transactions.category_id
+        left join accounts on accounts.id = transactions.account_id
+        where {where_sql}
+        order by transactions.transaction_date desc, transactions.created_at desc
+        limit ? offset ?
+        """,
+        [*params, limit, offset],
+    ).fetchall()
+
+    accounts = database.execute("select * from accounts where active = 1 order by name asc").fetchall()
+    categories = database.execute("select * from categories where active = 1 order by name asc").fetchall()
+
+    filter_state = {
+        "account_id": account_id,
+        "transaction_class": transaction_class,
+        "search": search,
+        "category_id": category_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "limit": limit,
+        "page": page,
+    }
+
+    return render_template(
+        "transactions.html",
+        transactions=transactions,
+        accounts=accounts,
+        categories=categories,
+        transaction_classes=sorted(TRANSACTION_CLASSES),
+        filter_state=filter_state,
+        total_count=total_count,
+        shown_start=offset + 1 if total_count else 0,
+        shown_end=min(offset + len(transactions), total_count),
+        pagination={
+            "current_page": page,
+            "total_pages": total_pages,
+            "has_previous": page > 1,
+            "has_next": page < total_pages,
+            "previous_page": page - 1,
+            "next_page": page + 1,
+        },
+    )
+
+
+@bp.post("/transactions/<transaction_id>/edit")
+def edit_transaction(transaction_id: str) -> str:
+    database = get_db()
+    category_id = request.form.get("category_id") or None
+    new_category_name = request.form.get("new_category_name", "")
+    transaction_class = request.form["transaction_class"]
+    review_note = request.form.get("review_note") or None
+
+    if transaction_class in {"ignore", "transfer"} and not category_id:
+        category_id = "category-transfers-ignore"
+
+    if new_category_name.strip():
+        category_id = _create_or_reuse_category(database, new_category_name)
+
+    needs_review = 1 if request.form.get("needs_review") else 0
+
+    database.execute(
+        """
+        update transactions
+        set category_id = ?,
+            transaction_class = ?,
+            needs_review = ?,
+            review_note = ?,
+            updated_at = current_timestamp
+        where id = ?
+        """,
+        (category_id, transaction_class, needs_review, review_note, transaction_id),
+    )
+    database.commit()
+    flash("Transaction updated.", "success")
+
+    redirect_params = {k: v for k, v in {
+        "account_id": request.form.get("next_account_id", ""),
+        "transaction_class": request.form.get("next_transaction_class", ""),
+        "search": request.form.get("next_search", ""),
+        "category_id": request.form.get("next_category_id", ""),
+        "date_from": request.form.get("next_date_from", ""),
+        "date_to": request.form.get("next_date_to", ""),
+        "limit": request.form.get("next_limit", "50"),
+        "page": request.form.get("next_page", "1"),
+    }.items() if v}
+    return redirect(url_for("moneyview.transactions_list", **redirect_params))
+
+
+@bp.get("/rules")
+def rules_list() -> str:
+    database = get_db()
+    rules = database.execute(
+        """
+        select
+          categorization_rules.*,
+          categories.name as category_name
+        from categorization_rules
+        left join categories on categories.id = categorization_rules.category_id
+        order by categorization_rules.priority desc, categorization_rules.updated_at desc, categorization_rules.id asc
+        """
+    ).fetchall()
+    categories = database.execute("select * from categories where active = 1 order by name asc").fetchall()
+    return render_template(
+        "rules.html",
+        rules=rules,
+        categories=categories,
+        transaction_classes=sorted(TRANSACTION_CLASSES),
+    )
+
+
+@bp.post("/rules/<rule_id>/toggle")
+def toggle_rule(rule_id: str) -> str:
+    database = get_db()
+    row = database.execute("select active from categorization_rules where id = ?", (rule_id,)).fetchone()
+    if row:
+        new_active = 0 if row["active"] else 1
+        database.execute(
+            "update categorization_rules set active = ?, updated_at = current_timestamp where id = ?",
+            (new_active, rule_id),
+        )
+        database.commit()
+        state = "enabled" if new_active else "disabled"
+        flash(f"Rule {state}.", "success")
+    return redirect(url_for("moneyview.rules_list"))
+
+
+@bp.post("/rules/<rule_id>/edit")
+def edit_rule(rule_id: str) -> str:
+    database = get_db()
+    database.execute(
+        """
+        update categorization_rules
+        set pattern = ?,
+            match_type = ?,
+            category_id = ?,
+            transaction_class = ?,
+            priority = ?,
+            notes = ?,
+            updated_at = current_timestamp
+        where id = ?
+        """,
+        (
+            request.form["pattern"],
+            request.form["match_type"],
+            request.form.get("category_id") or None,
+            request.form["transaction_class"],
+            int(request.form.get("priority") or 1000),
+            request.form.get("notes") or None,
+            rule_id,
+        ),
+    )
+    database.commit()
+    flash("Rule updated.", "success")
+    return redirect(url_for("moneyview.rules_list"))
+
+
+@bp.post("/rules/<rule_id>/delete")
+def delete_rule(rule_id: str) -> str:
+    database = get_db()
+    database.execute("delete from categorization_rules where id = ?", (rule_id,))
+    database.commit()
+    flash("Rule deleted.", "success")
+    return redirect(url_for("moneyview.rules_list"))
 
 
 @bp.get("/review")
@@ -391,6 +677,8 @@ def update_review(transaction_id: str) -> str:
     ).fetchone()["review_count"]
 
     database.commit()
+    rule_msg = " Rule created." if request.form.get("create_rule") else ""
+    flash(f"Transaction updated.{rule_msg}", "success")
     total_pages = max((remaining_review_count - 1) // filter_state["limit"] + 1, 1)
     filter_state["page"] = min(filter_state["page"], total_pages)
     return redirect(url_for("moneyview.review_queue", **_build_review_redirect_params(filter_state)))

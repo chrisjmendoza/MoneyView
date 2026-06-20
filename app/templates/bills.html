@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-review">
+
+  <div class="mb-2">
+    <h2 class="section-heading">Recurring Bills</h2>
+    <p class="import-lede">Manage your recurring bills. Due days are used to calculate safe-to-spend before next payday.</p>
+  </div>
+
+  {# Add new bill form #}
+  <details class="card mb-2">
+    <summary style="cursor:pointer; font-weight:600; font-size:1rem;">+ Add new bill</summary>
+    <form method="post" action="/bills" class="stack mt-1" style="max-width: 42rem;">
+      <div class="review-form-grid">
+        <div>
+          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Name</label>
+          <input type="text" name="name" placeholder="e.g. Rent" required>
+        </div>
+        <div>
+          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Amount ($)</label>
+          <input type="number" name="expected_amount" step="0.01" placeholder="0.00" required>
+        </div>
+        <div>
+          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Due day of month</label>
+          <input type="number" name="due_day" min="1" max="31" placeholder="1" required>
+        </div>
+        <div>
+          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Frequency</label>
+          <select name="frequency">
+            <option value="monthly">Monthly</option>
+            <option value="annual">Annual</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Category</label>
+          <select name="category_id">
+            <option value="">— none —</option>
+            {% for cat in categories %}
+            <option value="{{ cat.id }}">{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Account</label>
+          <select name="account_id">
+            <option value="">— none —</option>
+            {% for acct in accounts %}
+            <option value="{{ acct.id }}">{{ acct.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+        <label class="checkbox-inline">
+          <input type="checkbox" name="is_shared" value="1"> Shared expense
+        </label>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <span style="font-size:0.85rem; color:var(--muted);">Split count:</span>
+          <input type="number" name="split_count" min="2" max="10" style="width:5rem;">
+        </div>
+      </div>
+      <div>
+        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Notes</label>
+        <input type="text" name="notes" placeholder="Optional">
+      </div>
+      <button type="submit" style="max-width:12rem;">Add bill</button>
+    </form>
+  </details>
+
+  {# Bills table #}
+  {% if bills %}
+  <div class="review-list">
+    {% for bill in bills %}
+    <div class="review-card {% if not bill.active %}preview-row-review{% endif %}">
+      <div class="review-main-grid">
+
+        {# Left: bill summary #}
+        <div class="review-transaction">
+          <div class="review-headline">
+            <p class="review-amount">${{ "%.2f"|format(bill.expected_amount|float) }}</p>
+            <span class="muted" style="font-size:0.85rem;">Due day {{ bill.due_day }} · {{ bill.frequency }}</span>
+          </div>
+          <p class="review-description"><strong>{{ bill.name }}</strong></p>
+          <div class="review-badges">
+            {% if bill.category_name %}<span>{{ bill.category_name }}</span>{% endif %}
+            {% if bill.account_name %}<span>{{ bill.account_name }}</span>{% endif %}
+            {% if bill.is_shared %}<span>Shared ÷ {{ bill.split_count or "?" }}</span>{% endif %}
+            {% if not bill.active %}<span style="background:rgba(180,83,9,0.12); color:var(--warn);">Inactive</span>{% endif %}
+          </div>
+          {% if bill.notes %}
+          <p style="margin:0.35rem 0 0; font-size:0.82rem; color:var(--muted);">{{ bill.notes }}</p>
+          {% endif %}
+        </div>
+
+        {# Right: edit form #}
+        <form method="post" action="/bills/{{ bill.id }}/edit" class="review-form">
+          <div class="review-form-grid">
+            <div>
+              <label>Name</label>
+              <input type="text" name="name" value="{{ bill.name }}" required>
+            </div>
+            <div>
+              <label>Amount ($)</label>
+              <input type="number" name="expected_amount" step="0.01" value="{{ "%.2f"|format(bill.expected_amount|float) }}" required>
+            </div>
+            <div>
+              <label>Due day</label>
+              <input type="number" name="due_day" min="1" max="31" value="{{ bill.due_day }}" required>
+            </div>
+            <div>
+              <label>Frequency</label>
+              <select name="frequency">
+                {% for freq in ["monthly", "annual", "weekly"] %}
+                <option value="{{ freq }}" {% if bill.frequency == freq %}selected{% endif %}>{{ freq }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label>Category</label>
+              <select name="category_id">
+                <option value="">— none —</option>
+                {% for cat in categories %}
+                <option value="{{ cat.id }}" {% if bill.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label>Account</label>
+              <select name="account_id">
+                <option value="">— none —</option>
+                {% for acct in accounts %}
+                <option value="{{ acct.id }}" {% if bill.account_id == acct.id %}selected{% endif %}>{{ acct.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+            <label class="checkbox-inline">
+              <input type="checkbox" name="is_shared" value="1" {% if bill.is_shared %}checked{% endif %}> Shared
+            </label>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <span style="font-size:0.85rem; color:var(--muted);">Split count:</span>
+              <input type="number" name="split_count" min="2" max="10" value="{{ bill.split_count or '' }}" style="width:5rem;">
+            </div>
+            <label class="checkbox-inline">
+              <input type="checkbox" name="active" value="1" {% if bill.active %}checked{% endif %}> Active
+            </label>
+          </div>
+          <div>
+            <label>Notes</label>
+            <input type="text" name="notes" value="{{ bill.notes or '' }}">
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <form method="post" action="/bills/{{ bill.id }}/delete" class="inline" onsubmit="return confirm('Delete {{ bill.name }}?');">
+              <button type="submit" style="background:rgba(180,83,9,0.10); color:var(--warn); border:1px solid rgba(180,83,9,0.2); width:auto; padding:0.5rem 0.9rem;">Delete</button>
+            </form>
+            <button type="submit" style="max-width:10rem;">Save changes</button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="text-align:center; padding:2.5rem; color:var(--muted);">
+    No recurring bills yet. Add one above to include it in safe-to-spend calculations.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

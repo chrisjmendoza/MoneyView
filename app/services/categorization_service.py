@@ -1,5 +1,6 @@
 import re
 import sqlite3
+import uuid
 
 
 def fetch_rules(database: sqlite3.Connection) -> list[dict]:
@@ -79,12 +80,22 @@ def create_rule_from_review(
     requires_review: bool = False,
     notes: str | None = None,
 ) -> None:
-    rule_id = f"rule-user-{abs(hash((pattern, match_type, category_id, transaction_class, priority)))}"
+    rule_id = f"rule-user-{uuid.uuid4().hex[:12]}"
     database.execute(
         """
-        insert or replace into categorization_rules (
+        insert into categorization_rules (
           id, pattern, match_type, category_id, transaction_class, priority, requires_review, active, notes, updated_at
         ) values (?, ?, ?, ?, ?, ?, ?, 1, ?, current_timestamp)
+        on conflict(id) do update set
+          pattern = excluded.pattern,
+          match_type = excluded.match_type,
+          category_id = excluded.category_id,
+          transaction_class = excluded.transaction_class,
+          priority = excluded.priority,
+          requires_review = excluded.requires_review,
+          active = excluded.active,
+          notes = excluded.notes,
+          updated_at = excluded.updated_at
         """,
         (rule_id, pattern, match_type, category_id, transaction_class, priority, int(requires_review), notes),
     )

@@ -17,6 +17,7 @@ def get_db() -> sqlite3.Connection:
         connection = sqlite3.connect(database_path)
         connection.row_factory = dict_factory
         connection.execute("pragma foreign_keys = on")
+        connection.execute("pragma journal_mode = wal")
         g.db = connection
     return g.db
 
