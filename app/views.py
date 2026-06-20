@@ -73,6 +73,70 @@ def _build_review_redirect_params(filter_state: dict) -> dict:
     return redirect_params
 
 
+def _apply_rule_to_existing_queue(
+    database,
+    pattern: str,
+    match_type: str,
+    category_id: str | None,
+    transaction_class: str,
+    exclude_id: str,
+) -> int:
+    base_where = "(needs_review = 1 or category_id is null) and id != ?"
+    base_params: list = [exclude_id]
+
+    if match_type == "contains":
+        where = f"{base_where} and upper(description) like ?"
+        params = [*base_params, f"%{pattern.upper()}%"]
+        database.execute(
+            f"""
+            update transactions
+            set category_id = ?, transaction_class = ?, needs_review = 0,
+                review_note = 'Auto-applied from matching rule.', updated_at = current_timestamp
+            where {where}
+            """,
+            [category_id, transaction_class, *params],
+        )
+        return database.execute(f"select changes() as n").fetchone()["n"]
+
+    if match_type == "exact":
+        where = f"{base_where} and upper(description) = ?"
+        params = [*base_params, pattern.upper()]
+        database.execute(
+            f"""
+            update transactions
+            set category_id = ?, transaction_class = ?, needs_review = 0,
+                review_note = 'Auto-applied from matching rule.', updated_at = current_timestamp
+            where {where}
+            """,
+            [category_id, transaction_class, *params],
+        )
+        return database.execute("select changes() as n").fetchone()["n"]
+
+    if match_type == "regex":
+        import re as _re
+        candidates = database.execute(
+            "select id, description from transactions where needs_review = 1 or category_id is null"
+        ).fetchall()
+        matched_ids = [
+            row["id"]
+            for row in candidates
+            if row["id"] != exclude_id and _re.search(pattern, row["description"] or "", _re.IGNORECASE)
+        ]
+        for txn_id in matched_ids:
+            database.execute(
+                """
+                update transactions
+                set category_id = ?, transaction_class = ?, needs_review = 0,
+                    review_note = 'Auto-applied from matching rule.', updated_at = current_timestamp
+                where id = ?
+                """,
+                [category_id, transaction_class, txn_id],
+            )
+        return len(matched_ids)
+
+    return 0
+
+
 def _slugify_category_name(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
     return slug or "custom"
@@ -666,6 +730,12 @@ def update_review(transaction_id: str) -> str:
             notes=f"Created from review for transaction {transaction_id}.",
         )
 
+        backfill_count = 0
+        if request.form.get("apply_to_matching"):
+            backfill_count = _apply_rule_to_existing_queue(
+                database, pattern, match_type, category_id, transaction_class, transaction_id
+            )
+
     where_sql, params = _build_review_query_parts(filter_state)
     remaining_review_count = database.execute(
         f"""
@@ -677,8 +747,12 @@ def update_review(transaction_id: str) -> str:
     ).fetchone()["review_count"]
 
     database.commit()
-    rule_msg = " Rule created." if request.form.get("create_rule") else ""
-    flash(f"Transaction updated.{rule_msg}", "success")
+
+    if request.form.get("create_rule"):
+        backfill_msg = f" Also cleared {backfill_count} other matching transaction(s)." if backfill_count else ""
+        flash(f"Transaction updated. Rule created.{backfill_msg}", "success")
+    else:
+        flash("Transaction updated.", "success")
     total_pages = max((remaining_review_count - 1) // filter_state["limit"] + 1, 1)
     filter_state["page"] = min(filter_state["page"], total_pages)
     return redirect(url_for("moneyview.review_queue", **_build_review_redirect_params(filter_state)))
