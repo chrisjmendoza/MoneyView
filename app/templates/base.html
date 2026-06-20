@@ -49,6 +49,20 @@
         border: 1px solid var(--line);
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.6);
+        transition: background 0.12s, color 0.12s, border-color 0.12s;
+      }
+
+      nav a.nav-active {
+        background: var(--accent);
+        color: #fff;
+        border-color: var(--accent);
+        font-weight: 600;
+      }
+
+      nav a:not(.nav-active):hover {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--accent);
       }
 
       h1,
@@ -679,6 +693,137 @@
         border-color: rgba(15, 118, 110, 0.2);
       }
 
+      /* Small pill buttons used in table action cells */
+      .btn-pill {
+        font-size: 0.8rem;
+        padding: 0.28rem 0.7rem;
+        border-radius: 999px;
+        width: auto;
+        cursor: pointer;
+      }
+
+      .btn-pill-warn {
+        background: rgba(180, 83, 9, 0.10);
+        color: var(--warn);
+        border: 1px solid rgba(180, 83, 9, 0.22);
+      }
+
+      .btn-pill-enable {
+        background: rgba(15, 118, 110, 0.10);
+        color: var(--accent);
+        border: 1px solid rgba(15, 118, 110, 0.25);
+      }
+
+      .btn-pill-disable {
+        background: rgba(180, 83, 9, 0.10);
+        color: var(--warn);
+        border: 1px solid rgba(180, 83, 9, 0.22);
+      }
+
+      /* Actions cell in rules table */
+      .rule-actions {
+        vertical-align: top;
+        white-space: nowrap;
+      }
+
+      .rule-action-buttons {
+        display: flex;
+        gap: 0.35rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 0.4rem;
+      }
+
+      /* Edit summary inside rules table */
+      .rule-edit-summary {
+        cursor: pointer;
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 600;
+        list-style: none;
+        display: inline-block;
+      }
+
+      .rule-edit-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .rule-edit-form {
+        min-width: 17rem;
+        padding: 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+        margin-top: 0.5rem;
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .rule-field-label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+      }
+
+      /* Collapsible details without browser disclosure triangle */
+      .details-clean > summary {
+        list-style: none;
+      }
+
+      .details-clean > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      /* Styled file input wrapper */
+      .file-input-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.55rem 0.75rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        cursor: pointer;
+        min-height: 2.6rem;
+      }
+
+      .file-input-wrapper input[type="file"] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      .file-input-btn {
+        flex-shrink: 0;
+        padding: 0.3rem 0.8rem;
+        background: var(--accent-soft);
+        color: var(--accent);
+        border: 1px solid rgba(15, 118, 110, 0.25);
+        border-radius: 999px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        pointer-events: none;
+      }
+
+      .file-input-name {
+        font-size: 0.88rem;
+        color: var(--muted);
+        pointer-events: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       .flash-success {
         background: rgba(15, 118, 110, 0.10);
         border: 1px solid rgba(15, 118, 110, 0.25);
@@ -779,16 +924,16 @@
     </style>
   </head>
   <body>
+    {% set ep = request.endpoint %}
     <header>
       <h1>MoneyView</h1>
-      <p>Generic local-first finance CSV dashboard.</p>
       <nav>
-        <a href="/">Dashboard</a>
-        <a href="/import">Import</a>
-        <a href="/review">Review Queue</a>
-        <a href="/transactions">Transactions</a>
-        <a href="/rules">Rules</a>
-        <a href="/bills">Bills</a>
+        <a href="/" class="{% if ep == 'moneyview.dashboard' %}nav-active{% endif %}">Dashboard</a>
+        <a href="/import" class="{% if ep == 'moneyview.import_transactions' %}nav-active{% endif %}">Import</a>
+        <a href="/review" class="{% if ep == 'moneyview.review_queue' %}nav-active{% endif %}">Review Queue</a>
+        <a href="/transactions" class="{% if ep in ('moneyview.transactions_list', 'moneyview.edit_transaction') %}nav-active{% endif %}">Transactions</a>
+        <a href="/rules" class="{% if ep in ('moneyview.rules_list', 'moneyview.edit_rule', 'moneyview.toggle_rule', 'moneyview.delete_rule') %}nav-active{% endif %}">Rules</a>
+        <a href="/bills" class="{% if ep in ('moneyview.bills_list', 'moneyview.edit_bill', 'moneyview.delete_bill') %}nav-active{% endif %}">Bills</a>
       </nav>
     </header>
     <main>

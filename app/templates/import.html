@@ -22,7 +22,11 @@
           <option value="{{ profile.id }}" {% if form_state.profile_id == profile.id %}selected{% endif %}>{{ profile.institution }} - {{ profile.name }}</option>
         {% endfor %}
       </select>
-      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <label class="file-input-wrapper" id="file-label">
+        <input type="file" name="csv_file" accept=".csv,text/csv" required id="csv-file-input">
+        <span class="file-input-btn">Choose CSV</span>
+        <span class="file-input-name" id="file-label-text">No file chosen</span>
+      </label>
       <button type="submit">Preview First 5 Rows</button>
     </form>
 
@@ -208,4 +212,13 @@
       {% endif %}
     {% endif %}
   </section>
+  <script>
+    const fileInput = document.getElementById("csv-file-input");
+    const fileLabel = document.getElementById("file-label-text");
+    if (fileInput && fileLabel) {
+      fileInput.addEventListener("change", () => {
+        fileLabel.textContent = fileInput.files.length ? fileInput.files[0].name : "No file chosen";
+      });
+    }
+  </script>
 {% endblock %}
