@@ -42,7 +42,18 @@
       </div>
     </form>
 
-    <p class="muted">Showing {{ shown_count }} of {{ review_count }} review transaction(s).</p>
+    <div class="pagination-bar">
+      <p class="muted">Showing {{ shown_start }}-{{ shown_end }} of {{ review_count }} review transaction(s).</p>
+      <div class="pagination-links">
+        {% if pagination.has_previous %}
+          <a href="{{ url_for('moneyview.review_queue', account_id=filter_state.account_id, transaction_class=filter_state.transaction_class, search=filter_state.search, limit=filter_state.limit, page=pagination.previous_page, only_zelle='1' if filter_state.only_zelle else None) }}">Previous</a>
+        {% endif %}
+        <span>Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+        {% if pagination.has_next %}
+          <a href="{{ url_for('moneyview.review_queue', account_id=filter_state.account_id, transaction_class=filter_state.transaction_class, search=filter_state.search, limit=filter_state.limit, page=pagination.next_page, only_zelle='1' if filter_state.only_zelle else None) }}">Next</a>
+        {% endif %}
+      </div>
+    </div>
 
     <div class="review-list">
       {% for transaction in transactions %}
@@ -71,6 +82,7 @@
             <input type="hidden" name="next_transaction_class" value="{{ filter_state.transaction_class }}">
             <input type="hidden" name="next_search" value="{{ filter_state.search }}">
             <input type="hidden" name="next_limit" value="{{ filter_state.limit }}">
+            <input type="hidden" name="next_page" value="{{ filter_state.page }}">
             <input type="hidden" name="next_only_zelle" value="{% if filter_state.only_zelle %}1{% else %}0{% endif %}">
             <label>Category</label>
             <select name="category_id">
@@ -119,5 +131,20 @@
         <p>No transactions need review for the current filter.</p>
       {% endfor %}
     </div>
+
+    {% if review_count and pagination.total_pages > 1 %}
+      <div class="pagination-bar">
+        <p class="muted">Keep going until this page is clear, then move forward.</p>
+        <div class="pagination-links">
+          {% if pagination.has_previous %}
+            <a href="{{ url_for('moneyview.review_queue', account_id=filter_state.account_id, transaction_class=filter_state.transaction_class, search=filter_state.search, limit=filter_state.limit, page=pagination.previous_page, only_zelle='1' if filter_state.only_zelle else None) }}">Previous</a>
+          {% endif %}
+          <span>Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+          {% if pagination.has_next %}
+            <a href="{{ url_for('moneyview.review_queue', account_id=filter_state.account_id, transaction_class=filter_state.transaction_class, search=filter_state.search, limit=filter_state.limit, page=pagination.next_page, only_zelle='1' if filter_state.only_zelle else None) }}">Next</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
   </section>
 {% endblock %}

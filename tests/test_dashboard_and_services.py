@@ -6,6 +6,48 @@ from app.services.pay_period_service import calculate_pay_period
 from app.services.safe_to_spend_service import calculate_safe_to_spend
 
 
+def seed_review_queue_rows(database, total_rows: int = 12):
+    database.execute(
+        """
+        insert into imports (id, account_id, import_profile_id, source_file_name, rows_read, new_transactions)
+        values ('import-review-queue', 'acct-becu-checking', 'profile-becu-checking', 'review.csv', ?, ?)
+        """,
+        (total_rows, total_rows),
+    )
+    rows = []
+    for index in range(1, total_rows + 1):
+        rows.append(
+            (
+                f"txn-r{index}",
+                f"2026-06-{index:02d}",
+                "acct-becu-checking",
+                f"REVIEW ITEM {index}",
+                f"REVIEW ITEM {index}",
+                f"Review Item {index}",
+                -10.0 * index,
+                "outflow",
+                "needs_review",
+                None,
+                1,
+                "No categorization rule matched.",
+                f"hash-r{index}",
+                "{}",
+                "import-review-queue",
+            )
+        )
+
+    database.executemany(
+        """
+        insert into transactions (
+          id, transaction_date, account_id, description, raw_description, merchant, amount, direction,
+                    transaction_class, category_id, needs_review, review_note, transaction_hash, raw_csv_row_json, source_import_id
+                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
+    database.commit()
+
+
 def test_safe_to_spend_calculation():
     safe_to_spend = calculate_safe_to_spend(Decimal("2500.00"), Decimal("700.00"), Decimal("500.00"))
     assert safe_to_spend == Decimal("1300.00")
@@ -155,3 +197,41 @@ def test_dashboard_sanity_warnings(database):
     assert "review_total_high" in warning_codes
     assert "review_ratio_high" in warning_codes
     assert "missing_checking_balance" in warning_codes
+
+
+def test_review_queue_supports_pagination(client, database):
+    seed_review_queue_rows(database, total_rows=12)
+
+    response = client.get("/review?limit=10&page=2")
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Showing 11-12 of 12 review transaction(s)." in page
+    assert "Page 2 of 2" in page
+    assert "REVIEW ITEM 12" not in page
+    assert "REVIEW ITEM 2" in page
+    assert "REVIEW ITEM 1" in page
+
+
+def test_review_queue_save_clamps_back_to_previous_page(client, database):
+    seed_review_queue_rows(database, total_rows=11)
+
+    response = client.post(
+        "/review/txn-r1",
+        data={
+            "category_id": "category-groceries",
+            "transaction_class": "expense",
+            "review_note": "Reviewed on last page.",
+            "rule_source_description": "REVIEW ITEM 1",
+            "next_account_id": "",
+            "next_transaction_class": "",
+            "next_search": "",
+            "next_limit": "10",
+            "next_page": "2",
+            "next_only_zelle": "0",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/review?account_id=&transaction_class=&search=&limit=10&page=1")

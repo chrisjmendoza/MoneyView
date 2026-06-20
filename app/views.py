@@ -12,6 +12,61 @@ from .services.import_service import decode_upload, encode_upload, import_csv, n
 bp = Blueprint("moneyview", __name__)
 
 
+def _coerce_positive_int(raw_value: str | None, default: int, *, max_value: int | None = None) -> int:
+    try:
+        value = int(raw_value or default)
+    except (TypeError, ValueError):
+        value = default
+
+    value = max(value, 1)
+    if max_value is not None:
+        value = min(value, max_value)
+    return value
+
+
+def _read_review_filter_state(source) -> dict:
+    return {
+        "account_id": source.get("account_id", ""),
+        "transaction_class": source.get("transaction_class", ""),
+        "search": source.get("search", "").strip(),
+        "only_zelle": source.get("only_zelle") == "1",
+        "limit": _coerce_positive_int(source.get("limit"), 25, max_value=100),
+        "page": _coerce_positive_int(source.get("page"), 1),
+    }
+
+
+def _build_review_query_parts(filter_state: dict) -> tuple[str, list]:
+    where_clauses = ["(transactions.needs_review = 1 or transactions.category_id is null)"]
+    params: list = []
+
+    if filter_state["account_id"]:
+        where_clauses.append("transactions.account_id = ?")
+        params.append(filter_state["account_id"])
+    if filter_state["transaction_class"]:
+        where_clauses.append("transactions.transaction_class = ?")
+        params.append(filter_state["transaction_class"])
+    if filter_state["search"]:
+        where_clauses.append("upper(transactions.description) like ?")
+        params.append(f"%{filter_state['search'].upper()}%")
+    if filter_state["only_zelle"]:
+        where_clauses.append("upper(transactions.description) like '%ZELLE%'")
+
+    return " and ".join(where_clauses), params
+
+
+def _build_review_redirect_params(filter_state: dict) -> dict:
+    redirect_params = {
+        "account_id": filter_state["account_id"],
+        "transaction_class": filter_state["transaction_class"],
+        "search": filter_state["search"],
+        "limit": filter_state["limit"],
+        "page": filter_state["page"],
+    }
+    if filter_state["only_zelle"]:
+        redirect_params["only_zelle"] = "1"
+    return redirect_params
+
+
 @bp.get("/")
 def dashboard() -> str:
     window = request.args.get("window", "current_pay_period")
@@ -161,28 +216,8 @@ def import_transactions() -> str:
 @bp.get("/review")
 def review_queue() -> str:
     database = get_db()
-    account_id = request.args.get("account_id", "")
-    transaction_class = request.args.get("transaction_class", "")
-    search = request.args.get("search", "").strip()
-    only_zelle = request.args.get("only_zelle") == "1"
-    limit = min(max(int(request.args.get("limit", 25) or 25), 1), 100)
-
-    where_clauses = ["(transactions.needs_review = 1 or transactions.category_id is null)"]
-    params: list = []
-
-    if account_id:
-        where_clauses.append("transactions.account_id = ?")
-        params.append(account_id)
-    if transaction_class:
-        where_clauses.append("transactions.transaction_class = ?")
-        params.append(transaction_class)
-    if search:
-        where_clauses.append("upper(transactions.description) like ?")
-        params.append(f"%{search.upper()}%")
-    if only_zelle:
-        where_clauses.append("upper(transactions.description) like '%ZELLE%'")
-
-    where_sql = " and ".join(where_clauses)
+    filter_state = _read_review_filter_state(request.args)
+    where_sql, params = _build_review_query_parts(filter_state)
 
     total_review_count = database.execute(
         f"""
@@ -193,6 +228,10 @@ def review_queue() -> str:
         params,
     ).fetchone()["review_count"]
 
+    total_pages = max((total_review_count - 1) // filter_state["limit"] + 1, 1)
+    filter_state["page"] = min(filter_state["page"], total_pages)
+    offset = (filter_state["page"] - 1) * filter_state["limit"]
+
     transactions = database.execute(
         f"""
         select transactions.*, categories.name as category_name, accounts.name as account_name,
@@ -202,27 +241,34 @@ def review_queue() -> str:
         left join accounts on accounts.id = transactions.account_id
         where {where_sql}
         order by is_zelle desc, abs(transactions.amount) desc, transactions.transaction_date desc, transactions.created_at desc
-        limit ?
+        limit ? offset ?
         """,
-        [*params, limit],
+        [*params, filter_state["limit"], offset],
     ).fetchall()
     accounts = database.execute("select * from accounts where active = 1 order by name asc").fetchall()
     categories = database.execute("select * from categories where active = 1 order by name asc").fetchall()
+
+    shown_start = offset + 1 if total_review_count else 0
+    shown_end = min(offset + len(transactions), total_review_count)
     return render_template(
         "review_queue.html",
         transactions=transactions,
         accounts=accounts,
         categories=categories,
         transaction_classes=sorted(TRANSACTION_CLASSES),
-        filter_state={
-            "account_id": account_id,
-            "transaction_class": transaction_class,
-            "search": search,
-            "only_zelle": only_zelle,
-            "limit": limit,
-        },
+        filter_state=filter_state,
         review_count=total_review_count,
         shown_count=len(transactions),
+        shown_start=shown_start,
+        shown_end=shown_end,
+        pagination={
+            "current_page": filter_state["page"],
+            "total_pages": total_pages,
+            "has_previous": filter_state["page"] > 1,
+            "has_next": filter_state["page"] < total_pages,
+            "previous_page": filter_state["page"] - 1,
+            "next_page": filter_state["page"] + 1,
+        },
     )
 
 
@@ -232,6 +278,16 @@ def update_review(transaction_id: str) -> str:
     category_id = request.form.get("category_id") or None
     transaction_class = request.form["transaction_class"]
     review_note = request.form.get("review_note") or None
+    filter_state = _read_review_filter_state(
+        {
+            "account_id": request.form.get("next_account_id", ""),
+            "transaction_class": request.form.get("next_transaction_class", ""),
+            "search": request.form.get("next_search", ""),
+            "only_zelle": request.form.get("next_only_zelle", "0"),
+            "limit": request.form.get("next_limit", "25"),
+            "page": request.form.get("next_page", "1"),
+        }
+    )
 
     if transaction_class in {"ignore", "transfer"} and not category_id:
         category_id = "category-transfers-ignore"
@@ -273,13 +329,17 @@ def update_review(transaction_id: str) -> str:
             notes=f"Created from review for transaction {transaction_id}.",
         )
 
+    where_sql, params = _build_review_query_parts(filter_state)
+    remaining_review_count = database.execute(
+        f"""
+        select count(*) as review_count
+        from transactions
+        where {where_sql}
+        """,
+        params,
+    ).fetchone()["review_count"]
+
     database.commit()
-    redirect_params = {
-        "account_id": request.form.get("next_account_id", ""),
-        "transaction_class": request.form.get("next_transaction_class", ""),
-        "search": request.form.get("next_search", ""),
-        "limit": request.form.get("next_limit", "25"),
-    }
-    if request.form.get("next_only_zelle") == "1":
-        redirect_params["only_zelle"] = "1"
-    return redirect(url_for("moneyview.review_queue", **redirect_params))
+    total_pages = max((remaining_review_count - 1) // filter_state["limit"] + 1, 1)
+    filter_state["page"] = min(filter_state["page"], total_pages)
+    return redirect(url_for("moneyview.review_queue", **_build_review_redirect_params(filter_state)))
