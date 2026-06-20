@@ -23,6 +23,7 @@ Daily running journal of work completed on MoneyView.
 ### Stuff Done
 - Got the GitHub repo going: https://github.com/chrisjmendoza/MoneyView
 - Added the first project README with setup, run, test, import, and privacy instructions.
+- Expanded the README with a roadmap and development notes so the GitHub repo has clearer project direction.
 - Added `PRIVACY.md` with guardrails for using real financial data locally.
 - Added `contacts` support in the database for person-to-person classification context.
 - Added `/contacts` management support for storing known payment contacts.

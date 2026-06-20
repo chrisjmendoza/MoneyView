@@ -120,6 +120,29 @@ The project currently focuses on:
 - a review-first workflow for ambiguous transactions
 - dashboard trust improvements and import validation
 
+## Roadmap
+
+### Next Up
+
+- Add pagination or save-and-next behavior to make large review queues faster to clear.
+- Improve contact-aware handling for recurring Zelle patterns and reimbursements.
+- Add more import profiles for additional banks and export formats.
+- Tighten dashboard explanations so confidence warnings are even easier to interpret.
+
+### Later
+
+- Build a reusable column-mapping wizard for unsupported CSV layouts.
+- Add profile auto-suggestion based on detected CSV headers.
+- Expand recurring bill and planning tools around due dates and cash flow.
+- Add richer historical views and month-over-month spending comparisons.
+- Add exportable diagnostic reports for import validation without exposing private source data.
+
+## Development Notes
+
+- MoneyView is intentionally local-first and privacy-sensitive.
+- Real financial CSVs and local database files should stay out of source control.
+- The fastest feedback loop is `python main.py` for manual testing and `pytest -q` for regression checks.
+
 ## GitHub
 
 Repository:
