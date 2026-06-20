@@ -15,12 +15,21 @@ Daily running journal of work completed on MoneyView.
 - Added dashboard confidence summaries and sanity warnings to make import quality easier to verify.
 - Improved BECU import profile handling for real Money Manager exports, including account filtering, alternate description columns, and multiple date formats.
 - Improved amount sign detection using the export `Type` column when present.
-- Improved LOC and Zelle classification behavior so ambiguous transactions stay in review unless the system has stronger context.
+- Improved line-of-credit and Zelle classification behavior so ambiguous transactions stay in review unless the system has stronger context.
 - Improved fallback handling for transfer and ignore rules so they no longer create unnecessary review work.
 - Redesigned the import preview to focus on useful columns, clearer status badges, and better fit on smaller screens.
 - Redesigned the dashboard to better separate current-window metrics from all imported data and latest import validation.
 - Reworked the review queue into a filterable, card-based workflow so large review backlogs are manageable.
 - Added real page navigation to the review queue, including page-aware save redirects so the workflow stays usable when clearing a large backlog.
+- Tightened the review card UI density and redesigned the create-rule section into a cleaner, conditional rule builder for faster review decisions.
+- Simplified rule creation language for everyday users and moved technical controls into an Advanced options section.
+- Added plain-English help text and tooltip guidance for rule priority so users can safely keep defaults.
+- Updated user-facing LOC wording to Line of Credit across dashboard/import labels, warnings, and seeded account naming.
+- Replaced the fragile native browser tooltip with a reliable in-app hover/focus tooltip for rule-priority help.
+- Added an inline "add new category" option in the review form so users can create and apply categories without leaving the queue.
+- Added backend support to create or reuse matching category names safely (case-insensitive) during review saves.
+- Completed a deep review-card redesign for space efficiency: compact transaction summary, cleaner decision panel, lighter visual density, and improved action placement.
+- Added an inline "Add new category" details flow to keep advanced inputs available without cluttering the primary review path.
 - Fixed parsing for BECU dates that use two-digit years.
 - Fixed mixed-account CSV imports so rows are filtered to the selected account instead of being imported wholesale.
 - Fixed a dashboard service indentation regression introduced during refactoring.

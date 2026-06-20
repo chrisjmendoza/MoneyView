@@ -154,7 +154,7 @@ def build_sanity_warnings(
         warnings.append(
             {
                 "code": "loc_draws_counted_as_income",
-                "message": f"{int(mismatch['loc_as_income_count'])} LOC draw transaction(s) totaling ${float(mismatch['loc_as_income_total'] or 0):.2f} are marked as income.",
+                "message": f"{int(mismatch['loc_as_income_count'])} line of credit draw transaction(s) totaling ${float(mismatch['loc_as_income_total'] or 0):.2f} are marked as income.",
             }
         )
 

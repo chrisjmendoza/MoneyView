@@ -58,25 +58,6 @@
     <div class="review-list">
       {% for transaction in transactions %}
         <article class="review-card">
-          <div class="review-transaction">
-            <p class="eyebrow">{{ transaction.transaction_date }}</p>
-            <p class="review-amount">${{ "%.2f"|format(transaction.amount) }}</p>
-            <p><strong>{{ transaction.description }}</strong></p>
-            <div class="review-badges">
-              <span>{{ transaction.account_name }}</span>
-              <span>{{ transaction.transaction_class }}</span>
-              <span>{{ transaction.category_name or "No category" }}</span>
-              {% if transaction.matched_rule_pattern %}<span>Rule: {{ transaction.matched_rule_pattern }}</span>{% endif %}
-              {% if transaction.is_zelle %}<span>Zelle</span>{% endif %}
-            </div>
-            {% if transaction.review_note %}
-              <p class="muted">{{ transaction.review_note }}</p>
-            {% endif %}
-            {% if transaction.is_zelle %}
-              <p class="muted">Tip: exact-description rules are usually safest for person-to-person payments.</p>
-            {% endif %}
-          </div>
-
           <form method="post" action="/review/{{ transaction.id }}" class="review-form">
             <input type="hidden" name="next_account_id" value="{{ filter_state.account_id }}">
             <input type="hidden" name="next_transaction_class" value="{{ filter_state.transaction_class }}">
@@ -84,47 +65,118 @@
             <input type="hidden" name="next_limit" value="{{ filter_state.limit }}">
             <input type="hidden" name="next_page" value="{{ filter_state.page }}">
             <input type="hidden" name="next_only_zelle" value="{% if filter_state.only_zelle %}1{% else %}0{% endif %}">
-            <label>Category</label>
-            <select name="category_id">
-              <option value="">No category</option>
-              {% for category in categories %}
-                <option value="{{ category.id }}" {% if transaction.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
-              {% endfor %}
-            </select>
+            <div class="review-main-grid">
+              <div class="review-transaction">
+                <div class="review-headline">
+                  <p class="eyebrow">{{ transaction.transaction_date }}</p>
+                  <p class="review-amount">${{ "%.2f"|format(transaction.amount) }}</p>
+                </div>
+                <p class="review-description"><strong>{{ transaction.description }}</strong></p>
+                <div class="review-badges">
+                  <span>{{ transaction.account_name }}</span>
+                  <span>{{ transaction.transaction_class }}</span>
+                  <span>{{ transaction.category_name or "No category" }}</span>
+                  {% if transaction.matched_rule_pattern %}<span>Rule: {{ transaction.matched_rule_pattern }}</span>{% endif %}
+                  {% if transaction.is_zelle %}<span>Zelle</span>{% endif %}
+                </div>
+                {% if transaction.review_note %}
+                  <p class="muted">{{ transaction.review_note }}</p>
+                {% endif %}
+                {% if transaction.is_zelle %}
+                  <p class="muted">Tip: exact-description rules are usually safest for person-to-person payments.</p>
+                {% endif %}
+              </div>
 
-            <label>Transaction class</label>
-            <select name="transaction_class" required>
-              {% for option in transaction_classes %}
-                <option value="{{ option }}" {% if transaction.transaction_class == option %}selected{% endif %}>{{ option }}</option>
-              {% endfor %}
-            </select>
+              <div class="review-decision-panel">
+                <div class="review-form-grid">
+                  <div>
+                    <label>Category</label>
+                    <select name="category_id">
+                      <option value="">No category</option>
+                      {% for category in categories %}
+                        <option value="{{ category.id }}" {% if transaction.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+                      {% endfor %}
+                    </select>
+                    <details class="inline-add-category">
+                      <summary>Add new category</summary>
+                      <input class="new-category-input" type="text" name="new_category_name" placeholder="Example: Pets">
+                      <p class="muted">This category will be created and applied when you save.</p>
+                    </details>
+                  </div>
+                  <div>
+                    <label>Transaction class</label>
+                    <select name="transaction_class" required>
+                      {% for option in transaction_classes %}
+                        <option value="{{ option }}" {% if transaction.transaction_class == option %}selected{% endif %}>{{ option }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
 
-            <label>Review note</label>
-            <textarea name="review_note" placeholder="Optional review note">{{ transaction.review_note or "" }}</textarea>
+                <div>
+                  <label>Review note</label>
+                  <textarea name="review_note" placeholder="Optional note to remind future you">{{ transaction.review_note or "" }}</textarea>
+                </div>
+              </div>
+            </div>
 
-            <label><input type="checkbox" name="create_rule"> Create new rule from this transaction</label>
+            <label class="checkbox-inline"><input type="checkbox" name="create_rule" class="rule-toggle-input"> Save this as an auto-category rule</label>
             <input type="hidden" name="rule_source_description" value="{{ transaction.description }}">
 
-            <label>Rule pattern mode</label>
-            <select name="rule_pattern_mode">
-              <option value="contains_merchant" {% if not transaction.is_zelle %}selected{% endif %}>contains merchant text</option>
-              <option value="exact_description" {% if transaction.is_zelle %}selected{% endif %}>exact description</option>
-              <option value="custom_pattern">custom pattern</option>
-            </select>
+            <div class="rule-builder" hidden>
+              <div class="rule-builder-heading">Rule Builder</div>
+              <p class="rule-explainer">Use this when you want future transactions like this to be categorized automatically.</p>
+              <div class="review-form-grid">
+                <div>
+                  <label>How should it match?</label>
+                  <select name="rule_pattern_mode">
+                    <option value="contains_merchant" {% if not transaction.is_zelle %}selected{% endif %}>Use merchant keywords</option>
+                    <option value="exact_description" {% if transaction.is_zelle %}selected{% endif %}>Match this exact description (safer for person-to-person)</option>
+                    <option value="custom_pattern">Custom pattern</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Rule pattern</label>
+                  <input type="text" name="rule_pattern" value="{{ transaction.description }}" placeholder="Example: SAFEWAY or exact transfer text">
+                </div>
+              </div>
 
-            <label>Rule pattern</label>
-            <input type="text" name="rule_pattern" value="{{ transaction.description }}" placeholder="Rule pattern">
-
-            <label>Rule match type</label>
-            <select name="rule_match_type">
-              <option value="contains">contains</option>
-              <option value="exact">exact</option>
-              <option value="regex">regex</option>
-            </select>
-
-            <label>Rule priority</label>
-            <input type="number" name="rule_priority" value="1000" min="1">
-            <button type="submit">Save Review</button>
+              <details class="rule-advanced">
+                <summary>Advanced options</summary>
+                <div class="review-form-grid mt-1">
+                  <div>
+                    <label>Rule match type</label>
+                    <select name="rule_match_type">
+                      <option value="contains">Contains text</option>
+                      <option value="exact">Exact match</option>
+                      <option value="regex">Regex (advanced)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label>
+                      Rule priority
+                      <span class="help-inline">
+                        <button
+                          type="button"
+                          class="help-pill"
+                          aria-label="Rule priority help"
+                          aria-describedby="rule-priority-help-{{ transaction.id }}"
+                        >?
+                        </button>
+                        <span id="rule-priority-help-{{ transaction.id }}" class="help-tooltip" role="tooltip">
+                          If two rules both match, the one with the higher priority wins. Most users should keep 1000.
+                        </span>
+                      </span>
+                    </label>
+                    <input type="number" name="rule_priority" value="1000" min="1">
+                    <p class="muted">Usually leave this at 1000.</p>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div class="review-actions">
+              <button type="submit">Save Review</button>
+            </div>
           </form>
         </article>
       {% else %}
@@ -147,4 +199,21 @@
       </div>
     {% endif %}
   </section>
+
+  <script>
+    for (const form of document.querySelectorAll(".review-form")) {
+      const toggle = form.querySelector(".rule-toggle-input");
+      const ruleBuilder = form.querySelector(".rule-builder");
+      if (!toggle || !ruleBuilder) {
+        continue;
+      }
+
+      const syncRuleBuilder = () => {
+        ruleBuilder.hidden = !toggle.checked;
+      };
+
+      syncRuleBuilder();
+      toggle.addEventListener("change", syncRuleBuilder);
+    }
+  </script>
 {% endblock %}

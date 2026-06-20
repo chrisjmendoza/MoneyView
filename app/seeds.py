@@ -6,7 +6,7 @@ DEFAULT_ACCOUNTS = [
     ("acct-becu-savings", "BECU Savings", "BECU", "savings", "5643 * Savings Account"),
     ("acct-chase-credit-card", "Chase Credit Card", "Chase", "credit_card", None),
     ("acct-becu-credit-card", "BECU Credit Card", "BECU", "credit_card", "5515 * Visa Credit Card"),
-    ("acct-becu-loc", "BECU LOC", "BECU", "line_of_credit", "2672 * Line of Credit"),
+    ("acct-becu-loc", "BECU Line of Credit", "BECU", "line_of_credit", "2672 * Line of Credit"),
     ("acct-cash-wallet", "Cash Wallet", "Manual", "cash", None),
     ("acct-manual-other", "Manual Other", "Manual", "other", None),
 ]
@@ -198,6 +198,16 @@ def seed_defaults(database: sqlite3.Connection) -> None:
             """,
             (external_account_ref, account_id),
         )
+
+    # Keep existing databases aligned with clearer account naming.
+    database.execute(
+        """
+        update accounts
+        set name = 'BECU Line of Credit',
+            updated_at = current_timestamp
+        where id = 'acct-becu-loc' and name = 'BECU LOC'
+        """
+    )
 
     for profile in DEFAULT_PROFILES:
         database.execute(

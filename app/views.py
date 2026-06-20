@@ -1,4 +1,5 @@
 from datetime import date
+import re
 
 from flask import Blueprint, redirect, render_template, request, url_for
 
@@ -65,6 +66,44 @@ def _build_review_redirect_params(filter_state: dict) -> dict:
     if filter_state["only_zelle"]:
         redirect_params["only_zelle"] = "1"
     return redirect_params
+
+
+def _slugify_category_name(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return slug or "custom"
+
+
+def _create_or_reuse_category(database, raw_name: str) -> str | None:
+    category_name = (raw_name or "").strip()
+    if not category_name:
+        return None
+
+    existing = database.execute(
+        "select id from categories where lower(name) = lower(?) limit 1",
+        (category_name,),
+    ).fetchone()
+    if existing:
+        database.execute(
+            "update categories set active = 1, updated_at = current_timestamp where id = ?",
+            (existing["id"],),
+        )
+        return existing["id"]
+
+    base_slug = _slugify_category_name(category_name)
+    candidate_id = f"category-user-{base_slug}"
+    suffix = 2
+    while database.execute("select 1 from categories where id = ?", (candidate_id,)).fetchone():
+        candidate_id = f"category-user-{base_slug}-{suffix}"
+        suffix += 1
+
+    database.execute(
+        """
+        insert into categories (id, name, active, notes)
+        values (?, ?, 1, ?)
+        """,
+        (candidate_id, category_name, "Created from review queue."),
+    )
+    return candidate_id
 
 
 @bp.get("/")
@@ -276,6 +315,7 @@ def review_queue() -> str:
 def update_review(transaction_id: str) -> str:
     database = get_db()
     category_id = request.form.get("category_id") or None
+    new_category_name = request.form.get("new_category_name", "")
     transaction_class = request.form["transaction_class"]
     review_note = request.form.get("review_note") or None
     filter_state = _read_review_filter_state(
@@ -291,6 +331,9 @@ def update_review(transaction_id: str) -> str:
 
     if transaction_class in {"ignore", "transfer"} and not category_id:
         category_id = "category-transfers-ignore"
+
+    if new_category_name.strip():
+        category_id = _create_or_reuse_category(database, new_category_name)
 
     database.execute(
         """

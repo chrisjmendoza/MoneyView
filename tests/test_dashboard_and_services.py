@@ -235,3 +235,63 @@ def test_review_queue_save_clamps_back_to_previous_page(client, database):
 
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/review?account_id=&transaction_class=&search=&limit=10&page=1")
+
+
+def test_review_save_can_create_new_category(client, database):
+    seed_review_queue_rows(database, total_rows=1)
+
+    response = client.post(
+        "/review/txn-r1",
+        data={
+            "category_id": "",
+            "new_category_name": "Pet Care",
+            "transaction_class": "expense",
+            "review_note": "Created category during review.",
+            "rule_source_description": "REVIEW ITEM 1",
+            "next_account_id": "",
+            "next_transaction_class": "",
+            "next_search": "",
+            "next_limit": "25",
+            "next_page": "1",
+            "next_only_zelle": "0",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    created_category = database.execute("select id from categories where name = 'Pet Care'").fetchone()
+    assert created_category is not None
+
+    updated = database.execute(
+        "select category_id, needs_review from transactions where id = 'txn-r1'"
+    ).fetchone()
+    assert updated["category_id"] == created_category["id"]
+    assert updated["needs_review"] == 0
+
+
+def test_review_save_reuses_existing_category_name_case_insensitive(client, database):
+    seed_review_queue_rows(database, total_rows=1)
+
+    response = client.post(
+        "/review/txn-r1",
+        data={
+            "category_id": "",
+            "new_category_name": "groceries",
+            "transaction_class": "expense",
+            "review_note": "Reused existing category.",
+            "rule_source_description": "REVIEW ITEM 1",
+            "next_account_id": "",
+            "next_transaction_class": "",
+            "next_search": "",
+            "next_limit": "25",
+            "next_page": "1",
+            "next_only_zelle": "0",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    updated = database.execute(
+        "select category_id from transactions where id = 'txn-r1'"
+    ).fetchone()
+    assert updated["category_id"] == "category-groceries"
