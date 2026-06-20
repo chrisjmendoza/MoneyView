@@ -144,6 +144,410 @@
       .warning {
         color: var(--warn);
       }
+
+      .page-import {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .page-import p,
+      .page-import li,
+      .page-import label,
+      .page-import input,
+      .page-import select,
+      .page-import button,
+      .page-import textarea,
+      .page-import table {
+        font-family: inherit;
+      }
+
+      .import-lede {
+        margin: 0;
+        line-height: 1.55;
+      }
+
+      .import-note {
+        margin: 0;
+        padding: 0.8rem 0.95rem;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.72);
+        line-height: 1.55;
+      }
+
+      .import-note strong {
+        color: var(--ink);
+      }
+
+      .table-scroll {
+        overflow-x: auto;
+      }
+
+      .compact-table {
+        min-width: 100%;
+        font-size: 0.92rem;
+      }
+
+      .compact-table th,
+      .compact-table td {
+        padding: 0.82rem 0.65rem;
+        line-height: 1.45;
+      }
+
+      .nowrap {
+        white-space: nowrap;
+      }
+
+      .wrap-cell {
+        max-width: 24rem;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .preview-table {
+        table-layout: fixed;
+      }
+
+      .preview-table th {
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .preview-table td {
+        vertical-align: top;
+      }
+
+      .preview-table .description-col {
+        width: 50%;
+      }
+
+      .preview-table .amount-col,
+      .preview-table .status-col {
+        width: 11%;
+      }
+
+      .preview-table .date-col,
+      .preview-table .category-col {
+        width: 14%;
+      }
+
+      .preview-merchant {
+        margin: 0;
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .preview-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.45rem;
+      }
+
+      .preview-meta span {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.18rem 0.45rem;
+        border-radius: 999px;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--muted);
+        font-size: 0.76rem;
+      }
+
+      .preview-row-review {
+        background: rgba(180, 83, 9, 0.08);
+      }
+
+      .preview-row-ready {
+        background: rgba(15, 118, 110, 0.04);
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 6.1rem;
+        padding: 0.34rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .status-ready {
+        background: rgba(15, 118, 110, 0.12);
+        color: var(--accent);
+      }
+
+      .status-review {
+        background: rgba(180, 83, 9, 0.14);
+        color: var(--warn);
+      }
+
+      .page-dashboard {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .page-dashboard p,
+      .page-dashboard li,
+      .page-dashboard label,
+      .page-dashboard input,
+      .page-dashboard select,
+      .page-dashboard button,
+      .page-dashboard textarea,
+      .page-dashboard table {
+        font-family: inherit;
+      }
+
+      .page-review {
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .page-review p,
+      .page-review li,
+      .page-review label,
+      .page-review input,
+      .page-review select,
+      .page-review button,
+      .page-review textarea,
+      .page-review table {
+        font-family: inherit;
+      }
+
+      .filter-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr 1.4fr auto auto;
+        gap: 0.75rem;
+        align-items: end;
+      }
+
+      .review-list {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .review-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.9fr);
+        gap: 1rem;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .review-transaction {
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .review-amount {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+
+      .review-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+
+      .review-badges span {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.22rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        background: rgba(15, 118, 110, 0.08);
+        color: var(--muted);
+      }
+
+      .review-form {
+        display: grid;
+        gap: 0.7rem;
+      }
+
+      @media (max-width: 900px) {
+        .filter-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .review-card {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .page-dashboard h2 {
+        font-size: 1.1rem;
+        letter-spacing: 0.01em;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .hero-card {
+        display: grid;
+        gap: 0.55rem;
+      }
+
+      .eyebrow {
+        margin: 0;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .hero-value {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.05;
+        color: var(--ink);
+      }
+
+      .hero-value.negative {
+        color: var(--warn);
+      }
+
+      .hero-detail {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .confidence-meter {
+        height: 0.6rem;
+        border-radius: 999px;
+        background: rgba(34, 32, 27, 0.08);
+        overflow: hidden;
+      }
+
+      .confidence-meter span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #d97706 0%, #0f766e 100%);
+        border-radius: inherit;
+      }
+
+      .metric-list {
+        display: grid;
+        gap: 0.45rem;
+        margin: 0;
+      }
+
+      .metric-list p {
+        margin: 0;
+      }
+
+      .alert-list {
+        display: grid;
+        gap: 0.75rem;
+      }
+
+      .alert-item {
+        border-left: 4px solid var(--warn);
+        background: rgba(180, 83, 9, 0.07);
+        border-radius: 12px;
+        padding: 0.85rem 0.95rem;
+      }
+
+      .alert-item p {
+        margin: 0;
+        line-height: 1.5;
+      }
+
+      .section-heading {
+        margin: 0 0 0.75rem;
+      }
+
+      .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+      }
+
+      .summary-card {
+        display: grid;
+        gap: 0.35rem;
+      }
+
+      .summary-label {
+        margin: 0;
+        font-size: 0.85rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .summary-value {
+        margin: 0;
+        font-size: 1.45rem;
+        font-weight: 700;
+      }
+
+      .summary-note {
+        margin: 0;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .table-compact th {
+        font-size: 0.8rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .table-compact th,
+      .table-compact td {
+        padding: 0.7rem 0.65rem;
+      }
+
+      @media (max-width: 900px) {
+        .hero-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .amount-negative {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .amount-positive {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      details.debug-panel {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.6);
+        padding: 0.9rem 1rem;
+      }
+
+      details.debug-panel summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      @media (max-width: 900px) {
+        .preview-table {
+          min-width: 760px;
+        }
+
+        .preview-table .description-col {
+          width: 42%;
+        }
+      }
     </style>
   </head>
   <body>

@@ -1,74 +1,123 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="card stack" style="margin-bottom: 2rem;">
+  <section class="card stack page-review" style="margin-bottom: 2rem;">
     <h2>Review Queue</h2>
-    <p>Transactions stay here when they are uncategorized or explicitly flagged for review.</p>
+    <p>Transactions stay here when they are uncategorized or explicitly flagged for review. Start by filtering the queue down to a manageable slice, then save decisions one transaction at a time.</p>
 
-    <table>
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Description</th>
-          <th>Amount</th>
-          <th>Current Category</th>
-          <th>Current Class</th>
-          <th>Matched Rule</th>
-          <th>Account</th>
-          <th>Review Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for transaction in transactions %}
-          <tr>
-            <td>{{ transaction.transaction_date }}</td>
-            <td>
-              <strong>{{ transaction.description }}</strong><br>
-              <span class="muted">{{ transaction.merchant or "Unknown Merchant" }}</span>
-            </td>
-            <td>${{ "%.2f"|format(transaction.amount) }}</td>
-            <td>{{ transaction.category_name or "--" }}</td>
-            <td>{{ transaction.transaction_class }}</td>
-            <td>{{ transaction.matched_rule_pattern or "--" }}</td>
-            <td>{{ transaction.account_name }}</td>
-            <td>
-              <form method="post" action="/review/{{ transaction.id }}" class="stack">
-                <select name="category_id">
-                  <option value="">No category</option>
-                  {% for category in categories %}
-                    <option value="{{ category.id }}" {% if transaction.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
-                  {% endfor %}
-                </select>
-                <select name="transaction_class" required>
-                  {% for option in transaction_classes %}
-                    <option value="{{ option }}" {% if transaction.transaction_class == option %}selected{% endif %}>{{ option }}</option>
-                  {% endfor %}
-                </select>
-                <textarea name="review_note" placeholder="Optional review note">{{ transaction.review_note or "" }}</textarea>
-                <label><input type="checkbox" name="create_rule"> Create new rule from this transaction</label>
-                <input type="hidden" name="rule_source_description" value="{{ transaction.description }}">
-                <select name="rule_pattern_mode">
-                  <option value="contains_merchant" selected>contains merchant text</option>
-                  <option value="exact_description">exact description</option>
-                  <option value="custom_pattern">custom pattern</option>
-                </select>
-                <input type="text" name="rule_pattern" value="{{ transaction.description }}" placeholder="Rule pattern">
-                <select name="rule_match_type">
-                  <option value="contains">contains</option>
-                  <option value="exact">exact</option>
-                  <option value="regex">regex</option>
-                </select>
-                <input type="number" name="rule_priority" value="1000" min="1">
-                <button type="submit">Save Review</button>
-              </form>
-            </td>
-          </tr>
-        {% else %}
-          <tr>
-            <td colspan="8">No transactions need review.</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <form method="get" action="/review" class="filter-grid">
+      <div>
+        <label for="review-account-id">Account</label>
+        <select id="review-account-id" name="account_id" title="Account">
+          <option value="">All accounts</option>
+          {% for account in accounts %}
+            <option value="{{ account.id }}" {% if filter_state.account_id == account.id %}selected{% endif %}>{{ account.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="review-transaction-class">Class</label>
+        <select id="review-transaction-class" name="transaction_class" title="Transaction Class">
+          <option value="">All classes</option>
+          {% for option in transaction_classes %}
+            <option value="{{ option }}" {% if filter_state.transaction_class == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="review-search">Search description</label>
+        <input id="review-search" type="text" name="search" value="{{ filter_state.search }}" placeholder="Amazon, Zelle, Costco, etc.">
+      </div>
+      <div>
+        <label for="review-limit">Items shown</label>
+        <select id="review-limit" name="limit" title="Items shown">
+          {% for option in (10, 25, 50, 100) %}
+            <option value="{{ option }}" {% if filter_state.limit == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label><input type="checkbox" name="only_zelle" value="1" {% if filter_state.only_zelle %}checked{% endif %}> Zelle only</label>
+        <button type="submit">Apply Filters</button>
+      </div>
+    </form>
+
+    <p class="muted">Showing {{ shown_count }} of {{ review_count }} review transaction(s).</p>
+
+    <div class="review-list">
+      {% for transaction in transactions %}
+        <article class="review-card">
+          <div class="review-transaction">
+            <p class="eyebrow">{{ transaction.transaction_date }}</p>
+            <p class="review-amount">${{ "%.2f"|format(transaction.amount) }}</p>
+            <p><strong>{{ transaction.description }}</strong></p>
+            <div class="review-badges">
+              <span>{{ transaction.account_name }}</span>
+              <span>{{ transaction.transaction_class }}</span>
+              <span>{{ transaction.category_name or "No category" }}</span>
+              {% if transaction.matched_rule_pattern %}<span>Rule: {{ transaction.matched_rule_pattern }}</span>{% endif %}
+              {% if transaction.is_zelle %}<span>Zelle</span>{% endif %}
+            </div>
+            {% if transaction.review_note %}
+              <p class="muted">{{ transaction.review_note }}</p>
+            {% endif %}
+            {% if transaction.is_zelle %}
+              <p class="muted">Tip: exact-description rules are usually safest for person-to-person payments.</p>
+            {% endif %}
+          </div>
+
+          <form method="post" action="/review/{{ transaction.id }}" class="review-form">
+            <input type="hidden" name="next_account_id" value="{{ filter_state.account_id }}">
+            <input type="hidden" name="next_transaction_class" value="{{ filter_state.transaction_class }}">
+            <input type="hidden" name="next_search" value="{{ filter_state.search }}">
+            <input type="hidden" name="next_limit" value="{{ filter_state.limit }}">
+            <input type="hidden" name="next_only_zelle" value="{% if filter_state.only_zelle %}1{% else %}0{% endif %}">
+            <label>Category</label>
+            <select name="category_id">
+              <option value="">No category</option>
+              {% for category in categories %}
+                <option value="{{ category.id }}" {% if transaction.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+              {% endfor %}
+            </select>
+
+            <label>Transaction class</label>
+            <select name="transaction_class" required>
+              {% for option in transaction_classes %}
+                <option value="{{ option }}" {% if transaction.transaction_class == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+
+            <label>Review note</label>
+            <textarea name="review_note" placeholder="Optional review note">{{ transaction.review_note or "" }}</textarea>
+
+            <label><input type="checkbox" name="create_rule"> Create new rule from this transaction</label>
+            <input type="hidden" name="rule_source_description" value="{{ transaction.description }}">
+
+            <label>Rule pattern mode</label>
+            <select name="rule_pattern_mode">
+              <option value="contains_merchant" {% if not transaction.is_zelle %}selected{% endif %}>contains merchant text</option>
+              <option value="exact_description" {% if transaction.is_zelle %}selected{% endif %}>exact description</option>
+              <option value="custom_pattern">custom pattern</option>
+            </select>
+
+            <label>Rule pattern</label>
+            <input type="text" name="rule_pattern" value="{{ transaction.description }}" placeholder="Rule pattern">
+
+            <label>Rule match type</label>
+            <select name="rule_match_type">
+              <option value="contains">contains</option>
+              <option value="exact">exact</option>
+              <option value="regex">regex</option>
+            </select>
+
+            <label>Rule priority</label>
+            <input type="number" name="rule_priority" value="1000" min="1">
+            <button type="submit">Save Review</button>
+          </form>
+        </article>
+      {% else %}
+        <p>No transactions need review for the current filter.</p>
+      {% endfor %}
+    </div>
   </section>
 {% endblock %}

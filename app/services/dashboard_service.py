@@ -76,6 +76,175 @@ def compute_bills_due_before_next_paycheck(database: sqlite3.Connection, today: 
     return total
 
 
+def summarize_data_confidence(row: dict) -> dict:
+    total_transactions = int(row["total_transactions"] or 0)
+    categorized_transactions = int(row["categorized_transactions"] or 0)
+    percent_categorized = (categorized_transactions / total_transactions * 100) if total_transactions else 100.0
+    return {
+        "total_transactions": total_transactions,
+        "categorized_transactions": categorized_transactions,
+        "needs_review_count": int(row["needs_review_count"] or 0),
+        "needs_review_total": row["needs_review_total"],
+        "percent_categorized": percent_categorized,
+    }
+
+
+def latest_import_status(database: sqlite3.Connection) -> dict | None:
+    return database.execute(
+        """
+        select
+          imports.imported_at,
+          imports.source_file_name,
+          imports.rows_read,
+          imports.new_transactions,
+          imports.duplicates_skipped,
+          imports.errors_count,
+          imports.needs_review_count,
+          accounts.name as account_name,
+          import_profiles.name as profile_name
+        from imports
+        join accounts on accounts.id = imports.account_id
+        join import_profiles on import_profiles.id = imports.import_profile_id
+        order by imports.imported_at desc, imports.id desc
+        limit 1
+        """
+    ).fetchone()
+
+
+def build_sanity_warnings(
+    database: sqlite3.Connection,
+    range_start_iso: str,
+    range_end_iso: str,
+    pay_period: dict,
+    normal_paycheck_amount: Decimal,
+    checking_balance_found: bool,
+    bills_due_auto: Decimal,
+    manual_bills_override: Decimal,
+    data_confidence: dict,
+) -> list[dict]:
+    warnings: list[dict] = []
+
+    mismatch = database.execute(
+        """
+        select
+          sum(case when categories.name = 'Household Reimbursement' and transactions.transaction_class = 'income' then 1 else 0 end) as reimbursements_as_income_count,
+          coalesce(sum(case when categories.name = 'Household Reimbursement' and transactions.transaction_class = 'income' then abs(transactions.amount) else 0 end), 0) as reimbursements_as_income_total,
+          sum(case when categories.name = 'LOC Draw' and transactions.transaction_class = 'income' then 1 else 0 end) as loc_as_income_count,
+          coalesce(sum(case when categories.name = 'LOC Draw' and transactions.transaction_class = 'income' then abs(transactions.amount) else 0 end), 0) as loc_as_income_total,
+          sum(case when categories.name = 'Credit Card Payment' and transactions.transaction_class = 'expense' then 1 else 0 end) as cc_as_expense_count,
+          coalesce(sum(case when categories.name = 'Credit Card Payment' and transactions.transaction_class = 'expense' then abs(transactions.amount) else 0 end), 0) as cc_as_expense_total,
+          sum(case when transactions.transaction_class = 'expense' and (categories.name = 'Transfers / Ignore' or upper(transactions.description) like '%TRANSFER%' or upper(transactions.description) like '%XFER%' or upper(transactions.description) like '%TRNSFR%') then 1 else 0 end) as transfer_as_expense_count,
+          coalesce(sum(case when transactions.transaction_class = 'expense' and (categories.name = 'Transfers / Ignore' or upper(transactions.description) like '%TRANSFER%' or upper(transactions.description) like '%XFER%' or upper(transactions.description) like '%TRNSFR%') then abs(transactions.amount) else 0 end), 0) as transfer_as_expense_total
+        from transactions
+        left join categories on categories.id = transactions.category_id
+        where transactions.transaction_date between ? and ?
+        """,
+        (range_start_iso, range_end_iso),
+    ).fetchone()
+
+    if int(mismatch["reimbursements_as_income_count"] or 0) > 0:
+        warnings.append(
+            {
+                "code": "reimbursements_counted_as_income",
+                "message": f"{int(mismatch['reimbursements_as_income_count'])} reimbursement transaction(s) totaling ${float(mismatch['reimbursements_as_income_total'] or 0):.2f} are marked as income.",
+            }
+        )
+
+    if int(mismatch["loc_as_income_count"] or 0) > 0:
+        warnings.append(
+            {
+                "code": "loc_draws_counted_as_income",
+                "message": f"{int(mismatch['loc_as_income_count'])} LOC draw transaction(s) totaling ${float(mismatch['loc_as_income_total'] or 0):.2f} are marked as income.",
+            }
+        )
+
+    if int(mismatch["cc_as_expense_count"] or 0) > 0:
+        warnings.append(
+            {
+                "code": "credit_card_payments_as_expense",
+                "message": f"{int(mismatch['cc_as_expense_count'])} credit card payment transaction(s) totaling ${float(mismatch['cc_as_expense_total'] or 0):.2f} are marked as ordinary expense.",
+            }
+        )
+
+    if int(mismatch["transfer_as_expense_count"] or 0) > 0:
+        warnings.append(
+            {
+                "code": "transfers_as_expense",
+                "message": f"{int(mismatch['transfer_as_expense_count'])} transfer transaction(s) totaling ${float(mismatch['transfer_as_expense_total'] or 0):.2f} are marked as ordinary expense.",
+            }
+        )
+
+    review_count = int(data_confidence["needs_review_count"] or 0)
+    total_count = int(data_confidence["total_transactions"] or 0)
+    review_total = Decimal(str(data_confidence["needs_review_total"] or 0))
+    review_ratio = Decimal(str(review_count)) / Decimal(str(total_count)) if total_count else Decimal("0")
+
+    if review_ratio > Decimal("0.20"):
+        warnings.append(
+            {
+                "code": "review_ratio_high",
+                "message": f"Unknown/review transactions are {review_ratio * 100:.1f}% of this window ({review_count} of {total_count}).",
+            }
+        )
+
+    if review_total > Decimal("300"):
+        warnings.append(
+            {
+                "code": "review_total_high",
+                "message": f"Unknown/review total is ${float(review_total):.2f}, above the $300 safety threshold.",
+            }
+        )
+
+    if normal_paycheck_amount > Decimal("0"):
+        paycheck_count = database.execute(
+            """
+            select count(*) as paycheck_count
+            from transactions
+            left join categories on categories.id = transactions.category_id
+            where transactions.transaction_date between ? and ?
+              and transactions.transaction_class = 'income'
+              and (
+                categories.name = 'Paycheck'
+                or upper(transactions.description) like '%PAYROLL%'
+                or upper(transactions.description) like '%SOUND PROP%'
+              )
+            """,
+            (pay_period["current_payday"].isoformat(), pay_period["pay_period_end"].isoformat()),
+        ).fetchone()["paycheck_count"]
+        if int(paycheck_count or 0) == 0:
+            warnings.append(
+                {
+                    "code": "no_paycheck_detected",
+                    "message": "No paycheck-like income was detected in the current pay period window.",
+                }
+            )
+
+    if not checking_balance_found:
+        warnings.append(
+            {
+                "code": "missing_checking_balance",
+                "message": "Safe-to-spend cannot be calculated reliably because no checking balance snapshot was found.",
+            }
+        )
+
+    if manual_bills_override > Decimal("0"):
+        warnings.append(
+            {
+                "code": "manual_bills_override",
+                "message": f"Bills due before next paycheck is manually overridden to ${float(manual_bills_override):.2f}.",
+            }
+        )
+    elif bills_due_auto == Decimal("0"):
+        warnings.append(
+            {
+                "code": "bills_due_missing",
+                "message": "No bills due before next paycheck were detected; verify recurring bills and due days.",
+            }
+        )
+
+    return warnings
+
+
 def build_dashboard(database: sqlite3.Connection, today: date | None = None, window: str = "current_pay_period") -> dict:
     today = today or date.today()
     settings = load_settings(database)
@@ -87,17 +256,26 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
     range_start, range_end = resolve_window_range(window, today, pay_period)
     balances = latest_balances(database)
     checking_balance = Decimal("0")
+    checking_balance_found = False
 
     for balance in balances:
         if balance["account_type"] == "checking" and balance["balance"] is not None:
             checking_balance = Decimal(str(balance["balance"]))
+            checking_balance_found = True
             break
 
+    manual_bills_override = Decimal(settings.get("manual_bills_due_before_next_paycheck", "0"))
+    bills_due_auto = compute_bills_due_before_next_paycheck(
+        database,
+        today,
+        pay_period["next_payday"],
+        Decimal("0"),
+    )
     bills_due = compute_bills_due_before_next_paycheck(
         database,
         today,
         pay_period["next_payday"],
-        Decimal(settings.get("manual_bills_due_before_next_paycheck", "0")),
+        manual_bills_override,
     )
     safe_to_spend = calculate_safe_to_spend(
         checking_balance,
@@ -132,7 +310,7 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         (range_start_iso, range_end_iso),
     ).fetchone()
 
-    data_confidence = database.execute(
+    data_confidence_row = database.execute(
         """
         select
           count(*) as total_transactions,
@@ -145,9 +323,31 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         (range_start_iso, range_end_iso),
     ).fetchone()
 
-    total_transactions = int(data_confidence["total_transactions"] or 0)
-    categorized_transactions = int(data_confidence["categorized_transactions"] or 0)
-    percent_categorized = (categorized_transactions / total_transactions * 100) if total_transactions else 100.0
+    all_data_confidence_row = database.execute(
+        """
+        select
+          count(*) as total_transactions,
+          sum(case when category_id is not null and transaction_class <> 'needs_review' and needs_review = 0 then 1 else 0 end) as categorized_transactions,
+          sum(case when needs_review = 1 or category_id is null or transaction_class = 'needs_review' then 1 else 0 end) as needs_review_count,
+          coalesce(sum(case when needs_review = 1 or category_id is null or transaction_class = 'needs_review' then abs(amount) else 0 end), 0) as needs_review_total
+        from transactions
+        """
+    ).fetchone()
+
+    data_confidence = summarize_data_confidence(data_confidence_row)
+    all_data_confidence = summarize_data_confidence(all_data_confidence_row)
+
+    sanity_warnings = build_sanity_warnings(
+        database=database,
+        range_start_iso=range_start_iso,
+        range_end_iso=range_end_iso,
+        pay_period=pay_period,
+        normal_paycheck_amount=Decimal(settings.get("normal_paycheck_amount", "0")),
+        checking_balance_found=checking_balance_found,
+        bills_due_auto=bills_due_auto,
+        manual_bills_override=manual_bills_override,
+        data_confidence=data_confidence_row,
+    )
 
     top_categories = database.execute(
         """
@@ -194,18 +394,23 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
 
     return {
         "summary": summary,
-        "data_confidence": {
-            "total_transactions": total_transactions,
-            "categorized_transactions": categorized_transactions,
-            "needs_review_count": int(data_confidence["needs_review_count"] or 0),
-            "needs_review_total": data_confidence["needs_review_total"],
-            "percent_categorized": percent_categorized,
-        },
+        "data_confidence": data_confidence,
+        "all_data_confidence": all_data_confidence,
+        "latest_import": latest_import_status(database),
         "top_categories": top_categories,
         "review_transactions": review_transactions,
         "balances": balances,
         "accounts": database.execute("select * from accounts where active = 1 order by name asc").fetchall(),
         "categories": database.execute("select * from categories where active = 1 order by name asc").fetchall(),
+        "contacts": database.execute(
+            """
+            select contacts.*, categories.name as default_category_name
+            from contacts
+            left join categories on categories.id = contacts.default_category_id
+            where contacts.active = 1
+            order by contacts.name asc
+            """
+        ).fetchall(),
         "recurring_bills": recurring_bills,
         "settings": settings,
         "window": window,
@@ -216,4 +421,6 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         "pay_period": pay_period,
         "bills_due_before_next_paycheck": bills_due,
         "safe_to_spend": safe_to_spend,
+        "sanity_warnings": sanity_warnings,
+        "sanity_warning_count": len(sanity_warnings),
     }

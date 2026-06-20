@@ -32,6 +32,7 @@ def init_db() -> None:
     database = get_db()
     database.executescript(schema_path.read_text(encoding="utf-8"))
     ensure_integrity_columns(database)
+    ensure_support_tables(database)
     seed_defaults(database)
     database.commit()
 
@@ -41,6 +42,10 @@ def ensure_integrity_columns(database: sqlite3.Connection) -> None:
         row["name"]
         for row in database.execute("pragma table_info(transactions)").fetchall()
     }
+    import_profile_columns = {
+        row["name"]
+        for row in database.execute("pragma table_info(import_profiles)").fetchall()
+    }
 
     if "merchant" not in transaction_columns:
         database.execute("alter table transactions add column merchant text")
@@ -48,6 +53,29 @@ def ensure_integrity_columns(database: sqlite3.Connection) -> None:
         database.execute("alter table transactions add column matched_rule_id text references categorization_rules(id)")
     if "matched_rule_pattern" not in transaction_columns:
         database.execute("alter table transactions add column matched_rule_pattern text")
+    if "account_column" not in import_profile_columns:
+        database.execute("alter table import_profiles add column account_column text")
+    if "type_column" not in import_profile_columns:
+        database.execute("alter table import_profiles add column type_column text")
+
+
+def ensure_support_tables(database: sqlite3.Connection) -> None:
+        database.execute(
+                """
+                create table if not exists contacts (
+                    id text primary key,
+                    name text not null,
+                    relationship_type text not null,
+                    default_category_id text references categories(id),
+                    auto_apply integer not null default 0,
+                    active integer not null default 1,
+                    notes text,
+                    created_at text not null default current_timestamp,
+                    updated_at text not null default current_timestamp,
+                    check(relationship_type in ('roommate', 'friend', 'family', 'buyer_seller', 'other'))
+                )
+                """
+        )
 
 
 def init_app(app: Flask) -> None:

@@ -120,3 +120,38 @@ def test_pay_period_filtering(database):
     assert float(current_period["summary"]["normal_expense_total"]) == 110.00
     assert float(previous_period["summary"]["normal_expense_total"]) == 40.00
     assert float(current_month["summary"]["normal_expense_total"]) == 150.00
+
+
+def test_dashboard_sanity_warnings(database):
+    database.execute(
+        """
+        insert into imports (id, account_id, import_profile_id, source_file_name, rows_read, new_transactions)
+        values ('import-sanity', 'acct-becu-checking', 'profile-becu-checking', 'sanity.csv', 5, 5)
+        """
+    )
+    database.execute(
+        """
+        insert into transactions (
+          id, transaction_date, posted_date, account_id, description, raw_description, merchant, amount, direction,
+          transaction_class, category_id, needs_review, review_note, matched_rule_id, matched_rule_pattern, transaction_hash, raw_csv_row_json, source_import_id
+        ) values
+        ('txn-s1', '2026-06-20', null, 'acct-becu-checking', 'ROOMMATE PAYBACK', 'ROOMMATE PAYBACK', 'Roommate Payback', 120.00, 'inflow', 'income', 'category-household-reimbursement', 0, null, null, null, 'hash-s1', '{}', 'import-sanity'),
+        ('txn-s2', '2026-06-20', null, 'acct-becu-checking', 'LOC ADVANCE', 'LOC ADVANCE', 'Loc Advance', 300.00, 'inflow', 'income', 'category-loc-draw', 0, null, null, null, 'hash-s2', '{}', 'import-sanity'),
+        ('txn-s3', '2026-06-20', null, 'acct-becu-checking', 'CC PAYMENT', 'CC PAYMENT', 'Cc Payment', -250.00, 'outflow', 'expense', 'category-credit-card-payment', 0, null, null, null, 'hash-s3', '{}', 'import-sanity'),
+        ('txn-s4', '2026-06-20', null, 'acct-becu-checking', 'INTERNAL TRANSFER', 'INTERNAL TRANSFER', 'Internal Transfer', -200.00, 'outflow', 'expense', 'category-transfers-ignore', 0, null, null, null, 'hash-s4', '{}', 'import-sanity'),
+        ('txn-s5', '2026-06-20', null, 'acct-becu-checking', 'UNKNOWN MERCHANT', 'UNKNOWN MERCHANT', 'Unknown Merchant', -350.00, 'outflow', 'needs_review', null, 1, 'No categorization rule matched.', null, null, 'hash-s5', '{}', 'import-sanity'),
+        ('txn-s6', '2026-06-20', null, 'acct-becu-checking', 'ANOTHER UNKNOWN', 'ANOTHER UNKNOWN', 'Another Unknown', -20.00, 'outflow', 'needs_review', null, 1, 'No categorization rule matched.', null, null, 'hash-s6', '{}', 'import-sanity')
+        """
+    )
+    database.commit()
+
+    dashboard = build_dashboard(database, today=date(2026, 6, 20))
+    warning_codes = {warning["code"] for warning in dashboard["sanity_warnings"]}
+
+    assert "reimbursements_counted_as_income" in warning_codes
+    assert "loc_draws_counted_as_income" in warning_codes
+    assert "credit_card_payments_as_expense" in warning_codes
+    assert "transfers_as_expense" in warning_codes
+    assert "review_total_high" in warning_codes
+    assert "review_ratio_high" in warning_codes
+    assert "missing_checking_balance" in warning_codes

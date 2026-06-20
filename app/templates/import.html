@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="card stack">
+  <section class="card stack page-import">
     <h2>Import CSV</h2>
+    <p class="import-lede">Use the same BECU Money Manager CSV for one account at a time. Preview focuses on the key decision fields so you can quickly decide whether the import is trustworthy.</p>
+    <p class="import-note"><strong>Overlap is safe.</strong> Weekly or monthly exports can contain transactions you already imported. MoneyView checks for duplicates and skips them during import.</p>
+    {% if form_error %}
+      <p class="warning">{{ form_error }}</p>
+    {% endif %}
     <form method="post" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="action" value="preview">
       <label>Account</label>
@@ -23,42 +28,49 @@
 
     {% if preview_rows %}
       <h3>Preview</h3>
-      <table>
+      <p class="muted">Showing the first 5 matching rows for the selected account. Source row numbers may skip because other accounts in the same CSV are filtered out.</p>
+      <div class="table-scroll">
+      <table class="compact-table preview-table">
         <thead>
           <tr>
-            <th>Raw Row</th>
-            <th>Txn Date</th>
-            <th>Posted Date</th>
-            <th>Description</th>
-            <th>Amount</th>
-            <th>Direction</th>
-            <th>Account</th>
-            <th>Hash</th>
-            <th>Matched Rule</th>
-            <th>Category</th>
-            <th>Class</th>
-            <th>Needs Review</th>
+            <th class="date-col nowrap">Date</th>
+            <th class="description-col">Description</th>
+            <th class="amount-col nowrap">Amount</th>
+            <th class="category-col">Category</th>
+            <th class="status-col nowrap">Status</th>
           </tr>
         </thead>
         <tbody>
           {% for row in preview_rows %}
-            <tr>
-              <td>{{ row.row_number }}</td>
-              <td>{{ row.transaction_date }}</td>
-              <td>{{ row.posted_date or "--" }}</td>
-              <td>{{ row.description }}</td>
-              <td>${{ row.amount }}</td>
-              <td>{{ row.direction }}</td>
-              <td>{{ row.account_name }}</td>
-              <td><span class="muted">{{ row.transaction_hash[:14] }}...</span></td>
-              <td>{{ row.matched_rule or "--" }}</td>
-              <td>{{ row.category_name or "--" }}</td>
-              <td>{{ row.transaction_class }}</td>
-              <td>{% if row.needs_review %}<span class="warning">Needs review</span>{% else %}Ready{% endif %}</td>
+            <tr class="{% if row.needs_review %}preview-row-review{% else %}preview-row-ready{% endif %}">
+              <td class="nowrap">{{ row.transaction_date }}</td>
+              <td class="wrap-cell">
+                <p class="preview-merchant">{{ row.description }}</p>
+                <div class="preview-meta">
+                  <span>Source row {{ row.row_number }}</span>
+                  <span>{{ row.account_name }}</span>
+                  <span>{{ row.transaction_class }}</span>
+                  <span>{{ row.direction }}</span>
+                  {% if row.posted_date %}<span>Posted {{ row.posted_date }}</span>{% endif %}
+                  {% if row.matched_rule %}<span>Rule: {{ row.matched_rule }}</span>{% endif %}
+                </div>
+              </td>
+              <td class="nowrap {% if row.direction == 'inflow' %}amount-positive{% else %}amount-negative{% endif %}">
+                {% if row.direction == 'inflow' %}+{% else %}-{% endif %}${{ row.amount|replace('-', '') }}
+              </td>
+              <td class="wrap-cell">{{ row.category_name or "Needs Review" }}</td>
+              <td>
+                {% if row.needs_review %}
+                  <span class="status-badge status-review">Needs review</span>
+                {% else %}
+                  <span class="status-badge status-ready">Ready to import</span>
+                {% endif %}
+              </td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
+      </div>
 
       <form method="post" class="stack">
         <input type="hidden" name="action" value="import">
@@ -86,8 +98,9 @@
       {% endif %}
 
       {% if report.debug_report %}
-        <h3>Developer Debug Report</h3>
-        <table>
+        <details class="debug-panel">
+          <summary>Developer Debug Report</summary>
+        <table class="mt-1">
           <tbody>
             <tr><th>Imported file name</th><td>{{ report.debug_report.imported_file_name }}</td></tr>
             <tr><th>Selected account</th><td>{{ report.debug_report.selected_account }}</td></tr>
@@ -100,7 +113,51 @@
             <tr><th>Inflow total</th><td>${{ "%.2f"|format(report.debug_report.inflow_total or 0) }}</td></tr>
             <tr><th>Outflow total</th><td>${{ "%.2f"|format(report.debug_report.outflow_total or 0) }}</td></tr>
             <tr><th>Net total</th><td>${{ "%.2f"|format(report.debug_report.net_total or 0) }}</td></tr>
+            <tr><th>Normal income total</th><td>${{ "%.2f"|format(report.debug_report.normal_income_total or 0) }}</td></tr>
+            <tr><th>Reimbursement total</th><td>${{ "%.2f"|format(report.debug_report.reimbursement_total or 0) }}</td></tr>
+            <tr><th>Debt draw total</th><td>${{ "%.2f"|format(report.debug_report.debt_draw_total or 0) }}</td></tr>
+            <tr><th>Normal expense total</th><td>${{ "%.2f"|format(report.debug_report.normal_expense_total or 0) }}</td></tr>
+            <tr><th>Debt payment total</th><td>${{ "%.2f"|format(report.debug_report.debt_payment_total or 0) }}</td></tr>
+            <tr><th>Transfer/ignored total</th><td>${{ "%.2f"|format(report.debug_report.transfer_ignore_total or 0) }}</td></tr>
+            <tr><th>Review/unknown total</th><td>${{ "%.2f"|format(report.debug_report.review_unknown_total or 0) }}</td></tr>
+            <tr><th>Coffee shops total</th><td>${{ "%.2f"|format(report.debug_report.coffee_shops_total or 0) }}</td></tr>
+            <tr><th>Groceries total</th><td>${{ "%.2f"|format(report.debug_report.groceries_total or 0) }}</td></tr>
+            <tr><th>Fast food total</th><td>${{ "%.2f"|format(report.debug_report.fast_food_total or 0) }}</td></tr>
+            <tr><th>Restaurants total</th><td>${{ "%.2f"|format(report.debug_report.restaurants_total or 0) }}</td></tr>
+            <tr><th>Total food</th><td>${{ "%.2f"|format(report.debug_report.total_food or 0) }}</td></tr>
+            <tr><th>LOC draws detected</th><td>{{ report.debug_report.loc_draws_detected }}</td></tr>
+            <tr><th>Credit card payments detected</th><td>{{ report.debug_report.credit_card_payments_detected }}</td></tr>
             <tr><th>Transactions needing review</th><td>{{ report.debug_report.transactions_needing_review }}</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Transactions Needing Review</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Amount</th>
+              <th>Class</th>
+              <th>Category</th>
+              <th>Review Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for transaction in report.debug_report.transactions_needing_review_details %}
+              <tr>
+                <td>{{ transaction.transaction_date }}</td>
+                <td>{{ transaction.description }}</td>
+                <td>${{ "%.2f"|format(transaction.amount or 0) }}</td>
+                <td>{{ transaction.transaction_class }}</td>
+                <td>{{ transaction.category_name or "--" }}</td>
+                <td>{{ transaction.review_note or "--" }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="6">No review-required transactions in this import.</td>
+              </tr>
+            {% endfor %}
           </tbody>
         </table>
 
@@ -147,6 +204,7 @@
             {% endfor %}
           </tbody>
         </table>
+        </details>
       {% endif %}
     {% endif %}
   </section>

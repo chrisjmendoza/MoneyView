@@ -21,8 +21,10 @@ create table if not exists import_profiles (
   account_type text not null,
   date_column text not null,
   posted_date_column text,
+  account_column text,
   description_column text not null,
   amount_column text,
+  type_column text,
   debit_column text,
   credit_column text,
   balance_column text,
@@ -145,8 +147,22 @@ create table if not exists user_settings (
   updated_at text not null default current_timestamp
 );
 
+create table if not exists contacts (
+  id text primary key,
+  name text not null,
+  relationship_type text not null,
+  default_category_id text references categories(id),
+  auto_apply integer not null default 0,
+  active integer not null default 1,
+  notes text,
+  created_at text not null default current_timestamp,
+  updated_at text not null default current_timestamp,
+  check(relationship_type in ('roommate', 'friend', 'family', 'buyer_seller', 'other'))
+);
+
 create index if not exists idx_transactions_date on transactions(transaction_date);
 create index if not exists idx_transactions_category on transactions(category_id);
 create index if not exists idx_transactions_needs_review on transactions(needs_review);
 create index if not exists idx_transactions_source_import on transactions(source_import_id);
 create index if not exists idx_rules_priority on categorization_rules(active, priority desc, id asc);
+create index if not exists idx_contacts_name on contacts(active, name);

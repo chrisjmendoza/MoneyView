@@ -86,6 +86,27 @@ def create_bill() -> str:
     return redirect(url_for("moneyview.dashboard"))
 
 
+@bp.post("/contacts")
+def create_contact() -> str:
+    database = get_db()
+    database.execute(
+        """
+        insert into contacts (id, name, relationship_type, default_category_id, auto_apply, active, notes)
+        values (?, ?, ?, ?, ?, 1, ?)
+        """,
+        (
+            f"contact-{abs(hash((request.form['name'], request.form['relationship_type'], request.form.get('default_category_id') or '')))}",
+            request.form["name"].strip(),
+            request.form["relationship_type"],
+            request.form.get("default_category_id") or None,
+            1 if request.form.get("auto_apply") else 0,
+            request.form.get("notes") or None,
+        ),
+    )
+    database.commit()
+    return redirect(url_for("moneyview.dashboard"))
+
+
 @bp.route("/import", methods=["GET", "POST"])
 def import_transactions() -> str:
     database = get_db()
@@ -101,6 +122,7 @@ def import_transactions() -> str:
     }
     selected_account = None
     selected_profile = None
+    form_error = None
 
     if request.method == "POST":
         action = request.form.get("action")
@@ -108,18 +130,20 @@ def import_transactions() -> str:
         profile_id = request.form["profile_id"]
         selected_account = next((account for account in accounts if account["id"] == account_id), None)
         selected_profile = next((profile for profile in profiles if profile["id"] == profile_id), None)
+        try:
+            if action == "preview":
+                uploaded_file = request.files["csv_file"]
+                file_bytes = uploaded_file.read()
+                form_state["source_file_name"] = uploaded_file.filename or "upload.csv"
+                form_state["file_payload"] = encode_upload(file_bytes)
+                preview_rows = preview_import(database, file_bytes, account_id, profile_id)
 
-        if action == "preview":
-            uploaded_file = request.files["csv_file"]
-            file_bytes = uploaded_file.read()
-            form_state["source_file_name"] = uploaded_file.filename or "upload.csv"
-            form_state["file_payload"] = encode_upload(file_bytes)
-            preview_rows = preview_import(database, file_bytes, account_id, profile_id)
-
-        elif action == "import":
-            file_bytes = decode_upload(request.form["file_payload"])
-            preview_rows = preview_import(database, file_bytes, account_id, profile_id)
-            report = import_csv(database, file_bytes, request.form["source_file_name"], account_id, profile_id)
+            elif action == "import":
+                file_bytes = decode_upload(request.form["file_payload"])
+                preview_rows = preview_import(database, file_bytes, account_id, profile_id)
+                report = import_csv(database, file_bytes, request.form["source_file_name"], account_id, profile_id)
+        except ValueError as exc:
+            form_error = str(exc)
 
     return render_template(
         "import.html",
@@ -130,28 +154,75 @@ def import_transactions() -> str:
         form_state=form_state,
         selected_account=selected_account,
         selected_profile=selected_profile,
+        form_error=form_error,
     )
 
 
 @bp.get("/review")
 def review_queue() -> str:
     database = get_db()
+    account_id = request.args.get("account_id", "")
+    transaction_class = request.args.get("transaction_class", "")
+    search = request.args.get("search", "").strip()
+    only_zelle = request.args.get("only_zelle") == "1"
+    limit = min(max(int(request.args.get("limit", 25) or 25), 1), 100)
+
+    where_clauses = ["(transactions.needs_review = 1 or transactions.category_id is null)"]
+    params: list = []
+
+    if account_id:
+        where_clauses.append("transactions.account_id = ?")
+        params.append(account_id)
+    if transaction_class:
+        where_clauses.append("transactions.transaction_class = ?")
+        params.append(transaction_class)
+    if search:
+        where_clauses.append("upper(transactions.description) like ?")
+        params.append(f"%{search.upper()}%")
+    if only_zelle:
+        where_clauses.append("upper(transactions.description) like '%ZELLE%'")
+
+    where_sql = " and ".join(where_clauses)
+
+    total_review_count = database.execute(
+        f"""
+        select count(*) as review_count
+        from transactions
+        where {where_sql}
+        """,
+        params,
+    ).fetchone()["review_count"]
+
     transactions = database.execute(
-        """
-        select transactions.*, categories.name as category_name, accounts.name as account_name
+        f"""
+        select transactions.*, categories.name as category_name, accounts.name as account_name,
+               case when upper(transactions.description) like '%ZELLE%' then 1 else 0 end as is_zelle
         from transactions
         left join categories on categories.id = transactions.category_id
         left join accounts on accounts.id = transactions.account_id
-        where transactions.needs_review = 1 or transactions.category_id is null
-        order by transactions.transaction_date desc, transactions.created_at desc
-        """
+        where {where_sql}
+        order by is_zelle desc, abs(transactions.amount) desc, transactions.transaction_date desc, transactions.created_at desc
+        limit ?
+        """,
+        [*params, limit],
     ).fetchall()
+    accounts = database.execute("select * from accounts where active = 1 order by name asc").fetchall()
     categories = database.execute("select * from categories where active = 1 order by name asc").fetchall()
     return render_template(
         "review_queue.html",
         transactions=transactions,
+        accounts=accounts,
         categories=categories,
         transaction_classes=sorted(TRANSACTION_CLASSES),
+        filter_state={
+            "account_id": account_id,
+            "transaction_class": transaction_class,
+            "search": search,
+            "only_zelle": only_zelle,
+            "limit": limit,
+        },
+        review_count=total_review_count,
+        shown_count=len(transactions),
     )
 
 
@@ -203,4 +274,12 @@ def update_review(transaction_id: str) -> str:
         )
 
     database.commit()
-    return redirect(url_for("moneyview.review_queue"))
+    redirect_params = {
+        "account_id": request.form.get("next_account_id", ""),
+        "transaction_class": request.form.get("next_transaction_class", ""),
+        "search": request.form.get("next_search", ""),
+        "limit": request.form.get("next_limit", "25"),
+    }
+    if request.form.get("next_only_zelle") == "1":
+        redirect_params["only_zelle"] = "1"
+    return redirect(url_for("moneyview.review_queue", **redirect_params))

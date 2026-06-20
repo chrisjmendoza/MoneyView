@@ -10,8 +10,10 @@ Define reusable profile metadata for parsing diverse CSV formats into MoneyView'
 - account_type (enum: checking, savings, credit_card, loan, line_of_credit, other)
 - date_column (string, nullable)
 - posted_date_column (string, nullable)
+- account_column (string, nullable)
 - description_column (string, nullable)
 - amount_column (string, nullable)
+- type_column (string, nullable)
 - debit_column (string, nullable)
 - credit_column (string, nullable)
 - balance_column (string, nullable)
@@ -26,6 +28,12 @@ Define reusable profile metadata for parsing diverse CSV formats into MoneyView'
 ## Amount Sign Rule Contract
 ### signed_amount
 - Read numeric value from amount_column as-is.
+
+### signed_amount_or_type_column
+- Read numeric value from amount_column.
+- If type_column is present and row type is `Credit`, force positive.
+- If type_column is present and row type is `Debit`, force negative.
+- If type_column is missing, fall back to signed_amount behavior.
 
 ### debit_credit_columns
 - amount = credit - debit
@@ -43,6 +51,7 @@ Define reusable profile metadata for parsing diverse CSV formats into MoneyView'
 All profile adapters produce:
 - Canonical amount sign for internal analytics.
 - direction set to inflow or outflow.
+- Optional row-level account filtering when account_column is present.
 - stable transaction_hash for de-duplication.
 - raw_source_data JSON snapshot of original row.
 

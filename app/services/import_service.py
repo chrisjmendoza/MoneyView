@@ -13,6 +13,11 @@ from .categorization_service import apply_rules, fetch_rules
 from .constants import ACCOUNT_TYPES, TRANSACTION_CLASSES
 
 
+FEE_INTEREST_TOKENS = ("INTEREST", "FINANCE CHARGE", "ANNUAL FEE", "LATE FEE", "SERVICE FEE")
+TRANSFER_TOKENS = ("TRANSFER", "XFER", "TRNSFR")
+ZELLE_TOKENS = ("ZELLE FROM", "ZELLE TO", "ZELLE")
+
+
 def encode_upload(file_bytes: bytes) -> str:
     return base64.b64encode(file_bytes).decode("ascii")
 
@@ -39,11 +44,15 @@ def preview_import(database: sqlite3.Connection, file_bytes: bytes, account_id: 
     account = get_account(database, account_id)
     profile = get_profile(database, profile_id)
     rules = fetch_rules(database)
+    contacts = fetch_contacts(database)
     preview_rows: list[dict] = []
 
     for index, row in enumerate(iter_csv_rows(file_bytes, profile), start=1):
+        if not should_include_row_for_account(row, profile, account):
+            continue
         normalized = normalize_row(row, profile, account)
         normalized = apply_rules(normalized, rules)
+        normalized = apply_contextual_overrides(normalized, account, contacts)
         preview_rows.append(
             {
                 "row_number": index,
@@ -71,6 +80,7 @@ def import_csv(database: sqlite3.Connection, file_bytes: bytes, source_file_name
     account = get_account(database, account_id)
     profile = get_profile(database, profile_id)
     rules = fetch_rules(database)
+    contacts = fetch_contacts(database)
     import_id = f"import-{uuid.uuid4().hex}"
 
     database.execute(
@@ -88,10 +98,13 @@ def import_csv(database: sqlite3.Connection, file_bytes: bytes, source_file_name
     errors: list[str] = []
 
     for index, row in enumerate(iter_csv_rows(file_bytes, profile), start=1):
+        if not should_include_row_for_account(row, profile, account):
+            continue
         rows_read += 1
         try:
             normalized = normalize_row(row, profile, account)
             normalized = apply_rules(normalized, rules)
+            normalized = apply_contextual_overrides(normalized, account, contacts)
             normalized["source_import_id"] = import_id
 
             if normalized["needs_review"]:
@@ -241,10 +254,10 @@ def infer_base_transaction_class(account_type: str, amount: Decimal, description
 
     text = description.upper()
 
-    if any(token in text for token in ("TRANSFER", "XFER", "TRNSFR")):
+    if any(token in text for token in TRANSFER_TOKENS):
         return "transfer"
 
-    if any(token in text for token in ("INTEREST", "ANNUAL FEE", "LATE FEE", "SERVICE FEE")):
+    if any(token in text for token in FEE_INTEREST_TOKENS):
         return "fee_interest"
 
     if account_type in {"line_of_credit", "loan"}:
@@ -261,8 +274,12 @@ def infer_base_transaction_class(account_type: str, amount: Decimal, description
         if amount < 0:
             if any(token in text for token in ("CREDIT CARD", "CC PAYMENT", "CARD PAYMENT", "LOC PAYMENT", "LOAN PAYMENT")):
                 return "debt_payment"
+            if any(token in text for token in ZELLE_TOKENS):
+                return "needs_review"
             return "expense"
-        if any(token in text for token in ("REIMBURSE", "ROOMMATE", "ZELLE FROM", "VENMO CASHOUT", "CASH APP")):
+        if any(token in text for token in ZELLE_TOKENS):
+            return "needs_review"
+        if any(token in text for token in ("REIMBURSE", "ROOMMATE", "VENMO CASHOUT", "CASH APP")):
             return "reimbursement"
         if any(token in text for token in ("LOC ADVANCE", "LINE OF CREDIT", "LOAN DRAW")):
             return "debt_draw"
@@ -271,20 +288,149 @@ def infer_base_transaction_class(account_type: str, amount: Decimal, description
     return "needs_review"
 
 
+def fetch_contacts(database: sqlite3.Connection) -> list[dict]:
+    return database.execute(
+        """
+        select
+          contacts.id,
+          contacts.name,
+          contacts.relationship_type,
+          contacts.default_category_id,
+          contacts.auto_apply,
+          contacts.notes,
+          categories.name as default_category_name
+        from contacts
+        left join categories on categories.id = contacts.default_category_id
+        where contacts.active = 1
+        order by contacts.name asc
+        """
+    ).fetchall()
+
+
+def is_user_created_rule(rule_id: str | None) -> bool:
+    return bool(rule_id and rule_id.startswith("rule-user-"))
+
+
+def find_contact_match(description: str, contacts: list[dict]) -> dict | None:
+    text = description.upper()
+    for contact in contacts:
+        contact_name = (contact.get("name") or "").strip().upper()
+        if contact_name and contact_name in text:
+            return contact
+    return None
+
+
+def default_transaction_class_for_category(category_name: str | None) -> str | None:
+    if category_name == "Household Reimbursement":
+        return "reimbursement"
+    if category_name == "Credit Card Payment":
+        return "debt_payment"
+    if category_name == "LOC Draw":
+        return "debt_draw"
+    return None
+
+
+def apply_loc_overrides(transaction: dict, account: dict) -> dict:
+    if account["account_type"] not in {"line_of_credit", "loan"}:
+        return transaction
+
+    text = (transaction.get("description") or "").upper()
+    if any(token in text for token in FEE_INTEREST_TOKENS):
+        transaction["transaction_class"] = "fee_interest"
+        transaction["needs_review"] = True
+        transaction["review_note"] = transaction.get("review_note") or "Interest or finance charge detected on debt account."
+        return transaction
+
+    transaction["transaction_class"] = "debt_draw" if transaction["amount"] > 0 else "debt_payment"
+    return transaction
+
+
+def apply_zelle_overrides(transaction: dict, contacts: list[dict]) -> dict:
+    text = (transaction.get("description") or "").upper()
+    if not any(token in text for token in ZELLE_TOKENS):
+        return transaction
+
+    if is_user_created_rule(transaction.get("matched_rule_id")):
+        return transaction
+
+    matched_contact = find_contact_match(transaction.get("description") or "", contacts)
+    transaction["needs_review"] = True
+
+    if "ZELLE FROM" in text and matched_contact:
+        suggestion = matched_contact.get("default_category_name") or "Needs Review"
+        if matched_contact.get("auto_apply"):
+            transaction["category_id"] = matched_contact.get("default_category_id")
+            transaction["category_name"] = matched_contact.get("default_category_name")
+            transaction["transaction_class"] = default_transaction_class_for_category(suggestion) or "needs_review"
+        else:
+            transaction["category_id"] = None
+            transaction["category_name"] = None
+            transaction["transaction_class"] = "needs_review"
+        transaction["review_note"] = (
+            f"Zelle from known {matched_contact['relationship_type']} '{matched_contact['name']}'. "
+            f"Suggested category: {suggestion}. Review before confirming."
+        )
+        return transaction
+
+    transaction["category_id"] = None
+    transaction["category_name"] = None
+    transaction["transaction_class"] = "needs_review"
+    direction_text = "from" if "ZELLE FROM" in text else "to" if "ZELLE TO" in text else "transaction"
+    transaction["review_note"] = transaction.get("review_note") or f"Ambiguous Zelle {direction_text}; review before categorizing."
+    return transaction
+
+
+def apply_contextual_overrides(transaction: dict, account: dict, contacts: list[dict]) -> dict:
+    transaction = apply_loc_overrides(transaction, account)
+    transaction = apply_zelle_overrides(transaction, contacts)
+    return transaction
+
+
 def value_for_column(row: dict, column_name: str) -> str:
-    target = column_name.strip().lower()
-    for key, value in row.items():
-        if key is None:
-            continue
-        if key.strip().lower() == target:
-            return (value or "").strip()
+    candidates = [candidate.strip().lower() for candidate in (column_name or "").split("|") if candidate.strip()]
+    for candidate in candidates:
+        for key, value in row.items():
+            if key is None:
+                continue
+            if key.strip().lower() == candidate:
+                return (value or "").strip()
     raise ValueError(f"Missing expected column: {column_name}")
+
+
+def optional_value_for_column(row: dict, column_name: str | None) -> str | None:
+    if not column_name:
+        return None
+    try:
+        return value_for_column(row, column_name)
+    except ValueError:
+        return None
+
+
+def normalize_text(value: str | None) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
+def should_include_row_for_account(row: dict, profile: dict, account: dict) -> bool:
+    source_account = optional_value_for_column(row, profile.get("account_column"))
+    if not source_account:
+        return True
+
+    account_refs = [account.get("external_account_ref"), account.get("name")]
+    normalized_source = normalize_text(source_account)
+    return any(normalize_text(candidate) == normalized_source for candidate in account_refs if candidate)
 
 
 def parse_date(raw_value: str, date_format: str):
     if not raw_value:
         raise ValueError("Missing transaction date.")
-    return datetime.strptime(raw_value.strip(), date_format).date()
+    raw_value = raw_value.strip()
+    formats = [candidate.strip() for candidate in (date_format or "").split("|") if candidate.strip()]
+    for candidate in formats:
+        try:
+            return datetime.strptime(raw_value, candidate).date()
+        except ValueError:
+            continue
+    raise ValueError(f"time data {raw_value!r} does not match format {date_format!r}")
 
 
 def parse_decimal(raw_value: str | None) -> Decimal:
@@ -304,6 +450,19 @@ def calculate_amount(row: dict, profile: dict) -> Decimal:
 
     if sign_rule == "signed_amount":
         return parse_decimal(value_for_column(row, profile["amount_column"]))
+
+    if sign_rule == "signed_amount_or_type_column":
+        source_amount = parse_decimal(value_for_column(row, profile["amount_column"]))
+        type_value = optional_value_for_column(row, profile.get("type_column"))
+        if not type_value:
+            return source_amount
+
+        normalized_type = type_value.strip().lower()
+        if normalized_type == "credit":
+            return abs(source_amount)
+        if normalized_type == "debit":
+            return abs(source_amount) * Decimal("-1")
+        return source_amount
 
     if sign_rule == "debit_credit_columns":
         credit = parse_decimal(value_for_column(row, profile["credit_column"]))
@@ -418,6 +577,47 @@ def build_import_debug_report(database: sqlite3.Connection, import_id: str) -> d
         (import_id,),
     ).fetchone()
 
+    class_totals = database.execute(
+        """
+        select
+          coalesce(sum(case when transaction_class = 'income' then amount else 0 end), 0) as normal_income_total,
+          coalesce(sum(case when transaction_class = 'reimbursement' then amount else 0 end), 0) as reimbursement_total,
+          coalesce(sum(case when transaction_class = 'debt_draw' then abs(amount) else 0 end), 0) as debt_draw_total,
+          coalesce(sum(case when transaction_class = 'expense' and amount < 0 then abs(amount) else 0 end), 0) as normal_expense_total,
+          coalesce(sum(case when transaction_class = 'debt_payment' then abs(amount) else 0 end), 0) as debt_payment_total,
+          coalesce(sum(case when transaction_class in ('transfer', 'ignore') then abs(amount) else 0 end), 0) as transfer_ignore_total,
+          coalesce(sum(case when needs_review = 1 or category_id is null or transaction_class = 'needs_review' then abs(amount) else 0 end), 0) as review_unknown_total
+        from transactions
+        where source_import_id = ?
+        """,
+        (import_id,),
+    ).fetchone()
+
+    food_totals = database.execute(
+        """
+        select
+          coalesce(sum(case when categories.name = 'Coffee Shops' and transactions.transaction_class = 'expense' and transactions.amount < 0 then abs(transactions.amount) else 0 end), 0) as coffee_total,
+          coalesce(sum(case when categories.name = 'Groceries' and transactions.transaction_class = 'expense' and transactions.amount < 0 then abs(transactions.amount) else 0 end), 0) as groceries_total,
+          coalesce(sum(case when categories.name = 'Fast Food' and transactions.transaction_class = 'expense' and transactions.amount < 0 then abs(transactions.amount) else 0 end), 0) as fast_food_total,
+          coalesce(sum(case when categories.name = 'Restaurants' and transactions.transaction_class = 'expense' and transactions.amount < 0 then abs(transactions.amount) else 0 end), 0) as restaurants_total
+        from transactions
+        left join categories on categories.id = transactions.category_id
+        where transactions.source_import_id = ?
+        """,
+        (import_id,),
+    ).fetchone()
+
+    detection_counts = database.execute(
+        """
+        select
+          sum(case when transaction_class = 'debt_draw' or upper(description) like '%LOC ADVANCE%' or upper(description) like '%LINE OF CREDIT%' or upper(description) like '%LOAN DRAW%' then 1 else 0 end) as loc_draws_detected,
+          sum(case when transaction_class = 'debt_payment' and (lower(description) like '%credit card%' or lower(description) like '%cc payment%' or lower(description) like '%card payment%' or lower(description) like '%autopay%') then 1 else 0 end) as credit_card_payments_detected
+        from transactions
+        where source_import_id = ?
+        """,
+        (import_id,),
+    ).fetchone()
+
     top_raw_descriptions = database.execute(
         """
         select raw_description, count(*) as frequency
@@ -443,6 +643,32 @@ def build_import_debug_report(database: sqlite3.Connection, import_id: str) -> d
         (import_id,),
     ).fetchall()
 
+    review_transactions = database.execute(
+        """
+        select
+          transactions.transaction_date,
+          transactions.description,
+          transactions.amount,
+          transactions.transaction_class,
+          categories.name as category_name,
+          transactions.review_note
+        from transactions
+        left join categories on categories.id = transactions.category_id
+        where transactions.source_import_id = ?
+          and (transactions.needs_review = 1 or transactions.category_id is null or transactions.transaction_class = 'needs_review')
+        order by transactions.transaction_date desc, transactions.created_at desc
+        limit 20
+        """,
+        (import_id,),
+    ).fetchall()
+
+    food_total = (
+        Decimal(str(food_totals["coffee_total"] or 0))
+        + Decimal(str(food_totals["groceries_total"] or 0))
+        + Decimal(str(food_totals["fast_food_total"] or 0))
+        + Decimal(str(food_totals["restaurants_total"] or 0))
+    )
+
     return {
         "imported_file_name": metadata["source_file_name"],
         "selected_account": metadata["account_name"],
@@ -461,7 +687,22 @@ def build_import_debug_report(database: sqlite3.Connection, import_id: str) -> d
         "inflow_total": totals["inflow_total"],
         "outflow_total": totals["outflow_total"],
         "net_total": totals["net_total"],
+        "normal_income_total": class_totals["normal_income_total"],
+        "reimbursement_total": class_totals["reimbursement_total"],
+        "debt_draw_total": class_totals["debt_draw_total"],
+        "normal_expense_total": class_totals["normal_expense_total"],
+        "debt_payment_total": class_totals["debt_payment_total"],
+        "transfer_ignore_total": class_totals["transfer_ignore_total"],
+        "review_unknown_total": class_totals["review_unknown_total"],
+        "coffee_shops_total": food_totals["coffee_total"],
+        "groceries_total": food_totals["groceries_total"],
+        "fast_food_total": food_totals["fast_food_total"],
+        "restaurants_total": food_totals["restaurants_total"],
+        "total_food": food_total,
+        "loc_draws_detected": int(detection_counts["loc_draws_detected"] or 0),
+        "credit_card_payments_detected": int(detection_counts["credit_card_payments_detected"] or 0),
         "transactions_needing_review": metadata["needs_review_count"],
+        "transactions_needing_review_details": review_transactions,
         "top_raw_descriptions_by_frequency": top_raw_descriptions,
         "top_merchants_by_total_spend": top_spend_merchants,
     }

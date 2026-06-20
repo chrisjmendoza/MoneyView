@@ -2,13 +2,13 @@ import sqlite3
 
 
 DEFAULT_ACCOUNTS = [
-    ("acct-becu-checking", "BECU Checking", "BECU", "checking"),
-    ("acct-becu-savings", "BECU Savings", "BECU", "savings"),
-    ("acct-chase-credit-card", "Chase Credit Card", "Chase", "credit_card"),
-    ("acct-becu-credit-card", "BECU Credit Card", "BECU", "credit_card"),
-    ("acct-becu-loc", "BECU LOC", "BECU", "line_of_credit"),
-    ("acct-cash-wallet", "Cash Wallet", "Manual", "cash"),
-    ("acct-manual-other", "Manual Other", "Manual", "other"),
+    ("acct-becu-checking", "BECU Checking", "BECU", "checking", "5651 * Primary Checking"),
+    ("acct-becu-savings", "BECU Savings", "BECU", "savings", "5643 * Savings Account"),
+    ("acct-chase-credit-card", "Chase Credit Card", "Chase", "credit_card", None),
+    ("acct-becu-credit-card", "BECU Credit Card", "BECU", "credit_card", "5515 * Visa Credit Card"),
+    ("acct-becu-loc", "BECU LOC", "BECU", "line_of_credit", "2672 * Line of Credit"),
+    ("acct-cash-wallet", "Cash Wallet", "Manual", "cash", None),
+    ("acct-manual-other", "Manual Other", "Manual", "other", None),
 ]
 
 DEFAULT_PROFILES = [
@@ -19,16 +19,18 @@ DEFAULT_PROFILES = [
         "account_type": "checking",
         "date_column": "Date",
         "posted_date_column": None,
-        "description_column": "Description",
+        "account_column": "Account",
+        "description_column": "Original Description|Description|Memo",
         "amount_column": "Amount",
+        "type_column": "Type",
         "debit_column": None,
         "credit_column": None,
         "balance_column": "Balance",
-        "date_format": "%m/%d/%Y",
-        "amount_sign_rule": "signed_amount",
+        "date_format": "%m/%d/%Y|%m/%d/%y",
+        "amount_sign_rule": "signed_amount_or_type_column",
         "has_header": 1,
         "active": 1,
-        "notes": "Default profile for current BECU checking sample CSV layout.",
+        "notes": "Supports both signed-amount fixtures and real BECU exports that use Debit/Credit type plus 2-digit years.",
     },
     {
         "id": "profile-becu-savings",
@@ -37,16 +39,18 @@ DEFAULT_PROFILES = [
         "account_type": "savings",
         "date_column": "Date",
         "posted_date_column": None,
-        "description_column": "Description",
+        "account_column": "Account",
+        "description_column": "Original Description|Description|Memo",
         "amount_column": "Amount",
+        "type_column": "Type",
         "debit_column": None,
         "credit_column": None,
         "balance_column": "Balance",
-        "date_format": "%m/%d/%Y",
-        "amount_sign_rule": "signed_amount",
+        "date_format": "%m/%d/%Y|%m/%d/%y",
+        "amount_sign_rule": "signed_amount_or_type_column",
         "has_header": 1,
         "active": 1,
-        "notes": "Default profile for current BECU savings sample CSV layout.",
+        "notes": "Supports both signed-amount fixtures and real BECU exports that use Debit/Credit type plus 2-digit years.",
     },
     {
         "id": "profile-generic-signed",
@@ -55,6 +59,7 @@ DEFAULT_PROFILES = [
         "account_type": "checking",
         "date_column": "Date",
         "posted_date_column": None,
+        "account_column": None,
         "description_column": "Description",
         "amount_column": "Amount",
         "debit_column": None,
@@ -73,6 +78,7 @@ DEFAULT_PROFILES = [
         "account_type": "checking",
         "date_column": "Date",
         "posted_date_column": None,
+        "account_column": None,
         "description_column": "Description",
         "amount_column": None,
         "debit_column": "Debit",
@@ -91,6 +97,7 @@ DEFAULT_PROFILES = [
         "account_type": "credit_card",
         "date_column": "Date",
         "posted_date_column": None,
+        "account_column": None,
         "description_column": "Description",
         "amount_column": "Amount",
         "debit_column": None,
@@ -141,7 +148,6 @@ DEFAULT_RULES = [
     ("rule-winco", "WINCO", "contains", "Groceries", "expense", 900, 0, "Starter Chris rule."),
     ("rule-safeway", "SAFEWAY", "contains", "Groceries", "expense", 850, 0, "Starter Chris rule."),
     ("rule-sound-prop", "SOUND PROP", "contains", "Paycheck", "income", 900, 0, "Starter Chris rule."),
-    ("rule-zelle-from", "ZELLE FROM", "contains", "Household Reimbursement", "reimbursement", 900, 1, "Review reimbursement case before accepting."),
     ("rule-ziply", "ZIPLY", "contains", "Internet", "expense", 900, 0, "Starter Chris rule."),
     ("rule-snohomish-pud", "SNOHOMISH COUNTY PUD", "contains", "Utilities", "expense", 900, 0, "Starter Chris rule."),
     ("rule-alderwood-water", "ALDERWOOD WATER", "contains", "Utilities", "expense", 900, 0, "Starter Chris rule."),
@@ -175,13 +181,22 @@ def category_id(name: str) -> str:
 
 
 def seed_defaults(database: sqlite3.Connection) -> None:
-    for account_id, name, institution, account_type in DEFAULT_ACCOUNTS:
+    for account_id, name, institution, account_type, external_account_ref in DEFAULT_ACCOUNTS:
         database.execute(
             """
-            insert or ignore into accounts (id, name, institution, account_type)
-            values (?, ?, ?, ?)
+            insert or ignore into accounts (id, name, institution, account_type, external_account_ref)
+            values (?, ?, ?, ?, ?)
             """,
-            (account_id, name, institution, account_type),
+            (account_id, name, institution, account_type, external_account_ref),
+        )
+        database.execute(
+            """
+            update accounts
+            set external_account_ref = coalesce(?, external_account_ref),
+                updated_at = current_timestamp
+            where id = ?
+            """,
+            (external_account_ref, account_id),
         )
 
     for profile in DEFAULT_PROFILES:
@@ -189,9 +204,9 @@ def seed_defaults(database: sqlite3.Connection) -> None:
             """
             insert or ignore into import_profiles (
               id, name, institution, account_type, date_column, posted_date_column,
-              description_column, amount_column, debit_column, credit_column,
+                            account_column, description_column, amount_column, type_column, debit_column, credit_column,
               balance_column, date_format, amount_sign_rule, has_header, active, notes
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 profile["id"],
@@ -200,8 +215,10 @@ def seed_defaults(database: sqlite3.Connection) -> None:
                 profile["account_type"],
                 profile["date_column"],
                 profile["posted_date_column"],
+                                profile.get("account_column"),
                 profile["description_column"],
                 profile["amount_column"],
+                profile.get("type_column"),
                 profile["debit_column"],
                 profile["credit_column"],
                 profile["balance_column"],
@@ -210,6 +227,41 @@ def seed_defaults(database: sqlite3.Connection) -> None:
                 profile["has_header"],
                 profile["active"],
                 profile["notes"],
+            ),
+        )
+
+        database.execute(
+            """
+            update import_profiles
+            set date_column = ?,
+                posted_date_column = ?,
+                account_column = ?,
+                description_column = ?,
+                amount_column = ?,
+                type_column = ?,
+                debit_column = ?,
+                credit_column = ?,
+                balance_column = ?,
+                date_format = ?,
+                amount_sign_rule = ?,
+                notes = ?,
+                updated_at = current_timestamp
+            where id = ?
+            """,
+            (
+                profile["date_column"],
+                profile["posted_date_column"],
+                profile.get("account_column"),
+                profile["description_column"],
+                profile["amount_column"],
+                profile.get("type_column"),
+                profile["debit_column"],
+                profile["credit_column"],
+                profile["balance_column"],
+                profile["date_format"],
+                profile["amount_sign_rule"],
+                profile["notes"],
+                profile["id"],
             ),
         )
 
@@ -237,6 +289,16 @@ def seed_defaults(database: sqlite3.Connection) -> None:
                 notes,
             ),
         )
+
+    database.execute(
+        """
+        update categorization_rules
+        set active = 0,
+            notes = 'Legacy blanket Zelle rule disabled in favor of contact-based review handling.',
+            updated_at = current_timestamp
+        where id = 'rule-zelle-from'
+        """
+    )
 
     for setting_key, setting_value, notes in DEFAULT_SETTINGS:
         database.execute(

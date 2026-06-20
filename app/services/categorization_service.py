@@ -54,6 +54,13 @@ def apply_rules(transaction: dict, rules: list[dict]) -> dict:
                 transaction["review_note"] = rule["notes"] or "Matched a review-required rule."
             return transaction
 
+    if not transaction.get("category_id") and transaction.get("transaction_class") in {"transfer", "ignore"}:
+        transaction["category_id"] = "category-transfers-ignore"
+        transaction["category_name"] = "Transfers / Ignore"
+        transaction["needs_review"] = False
+        transaction["review_note"] = None
+        return transaction
+
     if not transaction.get("category_id"):
         transaction["needs_review"] = True
         transaction.setdefault("review_note", "No categorization rule matched.")

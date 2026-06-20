@@ -47,8 +47,10 @@ Fields:
 - account_type
 - date_column
 - posted_date_column
+- account_column
 - description_column
 - amount_column
+- type_column
 - debit_column
 - credit_column
 - balance_column
@@ -60,6 +62,7 @@ Fields:
 ## Amount Sign Rules
 Supported strategies:
 - signed_amount
+- signed_amount_or_type_column
 - debit_credit_columns
 - credit_card_positive_purchases
 - credit_card_negative_purchases

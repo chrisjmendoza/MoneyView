@@ -15,4 +15,15 @@ venv/
 .DS_Store
 Thumbs.db
 
-data/*.sqlite3
+data/
+instance/
+
+*.db
+*.sqlite
+*.sqlite3
+*.csv
+!tests/fixtures/*.csv
+*.xlsx
+*.pdf
+
+.env

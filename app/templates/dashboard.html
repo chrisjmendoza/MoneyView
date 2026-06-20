@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="card mb-2">
+  <section class="card mb-2 page-dashboard">
     <h2>View Window</h2>
+    <p class="hero-detail">The dashboard only summarizes the selected window below, not the entire import history. Your import validation summary shows what landed in the database overall.</p>
     <nav>
       <a href="/?window=current_pay_period" {% if dashboard.window == "current_pay_period" %}style="background: var(--accent-soft);"{% endif %}>Current Pay Period</a>
       <a href="/?window=previous_pay_period" {% if dashboard.window == "previous_pay_period" %}style="background: var(--accent-soft);"{% endif %}>Previous Pay Period</a>
@@ -11,73 +12,125 @@
     <p class="muted">Showing {{ dashboard.range.start }} to {{ dashboard.range.end }}.</p>
   </section>
 
-  <section class="grid cards">
-    <article class="card">
-      <h2>Imported Range</h2>
-      <p>{{ dashboard.summary.start_date or "No imports yet" }} to {{ dashboard.summary.end_date or "No imports yet" }}</p>
+  <section class="hero-grid mb-2 page-dashboard">
+    <article class="card hero-card">
+      <p class="eyebrow">Safe To Spend</p>
+      <p class="hero-value {% if dashboard.safe_to_spend < 0 %}negative{% endif %}">${{ "%.2f"|format(dashboard.safe_to_spend) }}</p>
+      <p class="hero-detail">Bills due before next payday: ${{ "%.2f"|format(dashboard.bills_due_before_next_paycheck) }}</p>
+      <p class="hero-detail">Next payday: {{ dashboard.pay_period.next_payday.isoformat() }} • Checking floor: ${{ "%.2f"|format(dashboard.settings.checking_floor|float) }}</p>
     </article>
-    <article class="card">
-      <h2>Normal Income</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.normal_income_total or 0) }}</p>
+
+    <article class="card hero-card">
+      <p class="eyebrow">Data Quality Status</p>
+      <p class="hero-value">{{ "%.0f"|format(dashboard.data_confidence.percent_categorized) }}%</p>
+      <div class="confidence-meter"><span style="width: {{ dashboard.data_confidence.percent_categorized }}%;"></span></div>
+      <div class="metric-list">
+        <p class="hero-detail">Current window: {{ dashboard.data_confidence.categorized_transactions }} of {{ dashboard.data_confidence.total_transactions }} categorized.</p>
+        <p class="hero-detail">Needs review now: {{ dashboard.data_confidence.needs_review_count }} transactions totaling ${{ "%.2f"|format(dashboard.data_confidence.needs_review_total) }}.</p>
+        <p class="hero-detail">All imported data: {{ dashboard.all_data_confidence.total_transactions }} transactions, {{ dashboard.all_data_confidence.needs_review_count }} still in review.</p>
+      </div>
     </article>
-    <article class="card">
-      <h2>Reimbursements</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.reimbursement_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Debt Draws</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.debt_draw_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Normal Expenses</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.normal_expense_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Debt Payments</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.debt_payment_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Transfers / Ignored</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.transfer_ignore_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Coffee Shop Spending</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.coffee_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Food Spending</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.food_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>LOC Draws</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.loc_draw_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Credit Card Payments</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.credit_card_payment_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Unknown / Review</h2>
-      <p>${{ "%.2f"|format(dashboard.summary.unknown_review_total or 0) }}</p>
-    </article>
-    <article class="card">
-      <h2>Data Confidence</h2>
-      <p>{{ "%.2f"|format(dashboard.data_confidence.percent_categorized) }}%</p>
-      <p class="muted">{{ dashboard.data_confidence.needs_review_count }} transactions need review totaling ${{ "%.2f"|format(dashboard.data_confidence.needs_review_total) }}</p>
-      <p class="muted">{{ dashboard.data_confidence.categorized_transactions }} of {{ dashboard.data_confidence.total_transactions }} categorized</p>
-    </article>
-    <article class="card">
-      <h2>Safe To Spend</h2>
-      <p>${{ "%.2f"|format(dashboard.safe_to_spend) }}</p>
-      <p class="muted">Bills due before next payday: ${{ "%.2f"|format(dashboard.bills_due_before_next_paycheck) }}</p>
-      <p class="muted">Next payday: {{ dashboard.pay_period.next_payday.isoformat() }}</p>
+
+    <article class="card hero-card">
+      <p class="eyebrow">Latest Import Validation</p>
+      {% if dashboard.latest_import %}
+        <p class="hero-value">{{ dashboard.latest_import.new_transactions }}</p>
+        <p class="hero-detail">new transactions imported on {{ dashboard.latest_import.imported_at }}</p>
+        <div class="metric-list">
+          <p class="hero-detail">Account: {{ dashboard.latest_import.account_name }} • Profile: {{ dashboard.latest_import.profile_name }}</p>
+          <p class="hero-detail">Rows read: {{ dashboard.latest_import.rows_read }} • Duplicates skipped: {{ dashboard.latest_import.duplicates_skipped }}</p>
+          <p class="hero-detail">Needs review from that import: {{ dashboard.latest_import.needs_review_count }} • Errors: {{ dashboard.latest_import.errors_count }}</p>
+        </div>
+      {% else %}
+        <p class="hero-value">0</p>
+        <p class="hero-detail">No imports yet.</p>
+      {% endif %}
     </article>
   </section>
 
-  <section class="grid two-col-wide mt-1">
+  <section class="card mb-2 stack page-dashboard">
+    <h2>Dashboard Sanity Checks</h2>
+    {% if dashboard.sanity_warnings %}
+      <p class="warning">{{ dashboard.sanity_warning_count }} warning(s) found. Review before trusting totals.</p>
+      <div class="alert-list">
+        {% for warning in dashboard.sanity_warnings %}
+          <div class="alert-item">
+            <p><strong>{{ warning.code|replace('_', ' ')|title }}</strong></p>
+            <p>{{ warning.message }}</p>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>No sanity warnings for the current window.</p>
+    {% endif %}
+  </section>
+
+  <section class="page-dashboard mt-1">
+    <h2 class="section-heading">Cash Flow Snapshot</h2>
+    <div class="summary-grid">
+    <article class="card summary-card">
+      <h2>Imported Range</h2>
+      <p class="summary-value">{{ dashboard.summary.start_date or "--" }}</p>
+      <p class="summary-note">to {{ dashboard.summary.end_date or "--" }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Normal Income</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.normal_income_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Reimbursements</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.reimbursement_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Debt Draws</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.debt_draw_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Normal Expenses</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.normal_expense_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Debt Payments</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.debt_payment_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Transfers / Ignored</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.transfer_ignore_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Unknown / Review</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.unknown_review_total or 0) }}</p>
+      <p class="summary-note">{{ dashboard.data_confidence.needs_review_count }} transactions need review in this window.</p>
+    </article>
+    </div>
+  </section>
+
+  <section class="page-dashboard mt-1">
+    <h2 class="section-heading">Spending Signals</h2>
+    <div class="summary-grid">
+    <article class="card summary-card">
+      <h2>Coffee Shop Spending</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.coffee_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Food Spending</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.food_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>LOC Draws</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.loc_draw_total or 0) }}</p>
+    </article>
+    <article class="card summary-card">
+      <h2>Credit Card Payments</h2>
+      <p class="summary-value">${{ "%.2f"|format(dashboard.summary.credit_card_payment_total or 0) }}</p>
+    </article>
+    </div>
+  </section>
+
+  <section class="grid two-col-wide mt-1 page-dashboard">
     <article class="card stack">
       <h2>Top 10 Spending Categories</h2>
-      <table>
+      <table class="table-compact">
         <thead>
           <tr>
             <th>Category</th>
@@ -100,7 +153,8 @@
     </article>
     <article class="card stack">
       <h2>Recent Review Queue</h2>
-      <table>
+      <p class="summary-note">These are the current-window transactions still blocking trust in the numbers above.</p>
+      <table class="table-compact">
         <thead>
           <tr>
             <th>Date</th>
@@ -125,10 +179,10 @@
     </article>
   </section>
 
-  <section class="grid two-col-even mt-1">
+  <section class="grid two-col-even mt-1 page-dashboard">
     <article class="card stack">
       <h2>Manual Balance Snapshots</h2>
-      <table>
+      <table class="table-compact">
         <thead>
           <tr>
             <th>Account</th>
@@ -165,6 +219,7 @@
 
     <article class="card stack">
       <h2>Pay Settings</h2>
+      <p class="summary-note">These settings control the current pay-period window and safe-to-spend estimate.</p>
       <form method="post" action="/settings" class="stack">
         <label for="pay-frequency">Pay Frequency</label>
         <select id="pay-frequency" name="pay_frequency" title="Pay Frequency" required>
@@ -183,10 +238,10 @@
     </article>
   </section>
 
-  <section class="grid two-col-even mt-1 mb-2">
+  <section class="grid two-col-even mt-1 mb-2 page-dashboard">
     <article class="card stack">
       <h2>Recurring Bills</h2>
-      <table>
+      <table class="table-compact">
         <thead>
           <tr>
             <th>Name</th>
@@ -241,6 +296,62 @@
         <input type="number" min="2" name="split_count" placeholder="Split count">
         <textarea name="notes" placeholder="Notes"></textarea>
         <button type="submit">Add Recurring Bill</button>
+      </form>
+    </article>
+  </section>
+
+  <section class="grid two-col-even mt-1 mb-2 page-dashboard">
+    <article class="card stack">
+      <h2>Known Contacts</h2>
+      <table class="table-compact">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Relationship</th>
+            <th>Default Category</th>
+            <th>Auto Apply</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for contact in dashboard.contacts %}
+            <tr>
+              <td>{{ contact.name }}</td>
+              <td>{{ contact.relationship_type }}</td>
+              <td>{{ contact.default_category_name or "--" }}</td>
+              <td>{% if contact.auto_apply %}Yes{% else %}No{% endif %}</td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="4">No known contacts configured.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </article>
+
+    <article class="card stack">
+      <h2>Add Known Contact</h2>
+      <form method="post" action="/contacts" class="stack">
+        <label for="contact-name">Name</label>
+        <input id="contact-name" type="text" name="name" placeholder="Name appearing in Zelle description" required>
+        <label for="contact-relationship">Relationship / Type</label>
+        <select id="contact-relationship" name="relationship_type" title="Relationship Type" required>
+          <option value="roommate">roommate</option>
+          <option value="friend">friend</option>
+          <option value="family">family</option>
+          <option value="buyer_seller">buyer/seller</option>
+          <option value="other">other</option>
+        </select>
+        <label for="contact-category">Default Suggested Category</label>
+        <select id="contact-category" name="default_category_id" title="Default Suggested Category">
+          <option value="">No default category</option>
+          {% for category in dashboard.categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+          {% endfor %}
+        </select>
+        <label><input type="checkbox" name="auto_apply"> Auto-apply suggested category/class before review</label>
+        <textarea name="notes" placeholder="Notes"></textarea>
+        <button type="submit">Save Contact</button>
       </form>
     </article>
   </section>
