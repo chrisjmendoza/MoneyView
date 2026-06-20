@@ -9,9 +9,9 @@
 
   {# Filter bar #}
   <form method="get" action="/transactions" class="card mb-2">
-    <div class="filter-grid" style="grid-template-columns: 1.2fr 1fr 1.4fr 1fr auto auto auto;">
+    <div class="filter-grid filter-grid-transactions">
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Account</label>
+        <label class="field-label">Account</label>
         <select name="account_id">
           <option value="">All accounts</option>
           {% for acct in accounts %}
@@ -20,7 +20,7 @@
         </select>
       </div>
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Class</label>
+        <label class="field-label">Class</label>
         <select name="transaction_class">
           <option value="">All classes</option>
           {% for tc in transaction_classes %}
@@ -29,11 +29,11 @@
         </select>
       </div>
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Search description</label>
+        <label class="field-label">Search description</label>
         <input type="text" name="search" value="{{ filter_state.search }}" placeholder="e.g. Amazon">
       </div>
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Category</label>
+        <label class="field-label">Category</label>
         <select name="category_id">
           <option value="">All categories</option>
           <option value="__uncategorized__" {% if filter_state.category_id == "__uncategorized__" %}selected{% endif %}>— Uncategorized —</option>
@@ -43,16 +43,16 @@
         </select>
       </div>
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">From</label>
+        <label class="field-label">From</label>
         <input type="date" name="date_from" value="{{ filter_state.date_from }}">
       </div>
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">To</label>
+        <label class="field-label">To</label>
         <input type="date" name="date_to" value="{{ filter_state.date_to }}">
       </div>
-      <div style="display:flex; align-items:flex-end; gap:0.4rem;">
-        <button type="submit" style="white-space:nowrap; width:auto; padding:0.65rem 1rem;">Filter</button>
-        <a href="/transactions" style="display:inline-flex; align-items:center; padding:0.65rem 0.85rem; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--muted); text-decoration:none; font-size:0.9rem; white-space:nowrap;">Clear</a>
+      <div class="filter-actions">
+        <button type="submit" class="btn-filter">Filter</button>
+        <a href="/transactions" class="btn-clear">Clear</a>
       </div>
     </div>
     <input type="hidden" name="limit" value="{{ filter_state.limit }}">
@@ -60,7 +60,7 @@
 
   {# Pagination bar #}
   <div class="pagination-bar mb-2">
-    <p class="muted" style="margin:0; font-size:0.9rem;">
+    <p class="muted pagination-meta">
       {% if total_count %}
         Showing {{ shown_start }}–{{ shown_end }} of {{ total_count }} transactions
       {% else %}
@@ -90,21 +90,21 @@
             <p class="review-amount {% if txn.amount < 0 %}amount-negative{% else %}amount-positive{% endif %}">
               {% if txn.amount < 0 %}−${{ "%.2f"|format(txn.amount|abs) }}{% else %}+${{ "%.2f"|format(txn.amount) }}{% endif %}
             </p>
-            <span class="muted" style="font-size:0.85rem; white-space:nowrap;">{{ txn.transaction_date }}</span>
+            <span class="meta-text">{{ txn.transaction_date }}</span>
           </div>
           <p class="review-description"><strong>{{ txn.merchant or txn.description }}</strong></p>
           {% if txn.merchant and txn.merchant != txn.description %}
-          <p style="margin:0; color:var(--muted); font-size:0.82rem;">{{ txn.description }}</p>
+          <p class="card-note">{{ txn.description }}</p>
           {% endif %}
           <div class="review-badges">
             <span>{{ txn.account_name }}</span>
             <span>{{ txn.transaction_class }}</span>
             {% if txn.category_name %}<span>{{ txn.category_name }}</span>{% endif %}
-            {% if txn.needs_review %}<span style="background:rgba(180,83,9,0.12); color:var(--warn);">Needs review</span>{% endif %}
+            {% if txn.needs_review %}<span class="badge-warn">Needs review</span>{% endif %}
             {% if txn.matched_rule_pattern %}<span title="Matched rule: {{ txn.matched_rule_pattern }}">Rule matched</span>{% endif %}
           </div>
           {% if txn.review_note %}
-          <p style="margin:0.35rem 0 0; font-size:0.82rem; color:var(--muted);">{{ txn.review_note }}</p>
+          <p class="card-note">{{ txn.review_note }}</p>
           {% endif %}
         </div>
 
@@ -151,19 +151,19 @@
             <textarea name="review_note" rows="2">{{ txn.review_note or "" }}</textarea>
           </div>
 
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
-            <label class="checkbox-inline" style="font-size:0.82rem;">
+          <div class="row-between">
+            <label class="checkbox-inline">
               <input type="checkbox" name="needs_review" value="1" {% if txn.needs_review %}checked{% endif %}>
               Keep in review queue
             </label>
-            <button type="submit" style="max-width:10rem;">Save</button>
+            <button type="submit" class="btn-action">Save</button>
           </div>
         </form>
 
       </div>
     </div>
     {% else %}
-    <div class="card" style="text-align:center; padding:2.5rem; color:var(--muted);">
+    <div class="card empty-state">
       No transactions match these filters.
     </div>
     {% endfor %}

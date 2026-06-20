@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <section class="card stack page-review" style="margin-bottom: 2rem;">
+  <section class="card stack page-review mb-2">
     <h2>Review Queue</h2>
     <p>Transactions stay here when they are uncategorized or explicitly flagged for review. Start by filtering the queue down to a manageable slice, then save decisions one transaction at a time.</p>
 
@@ -37,9 +37,9 @@
         </select>
       </div>
       <div>
-        <label style="display:block; visibility:hidden; font-size:0.82rem; margin-bottom:0.3rem;">‌</label>
-        <label style="display:flex; align-items:center; gap:0.45rem; margin-bottom:0.5rem; font-size:0.9rem; cursor:pointer;">
-          <input type="checkbox" name="only_zelle" value="1" {% if filter_state.only_zelle %}checked{% endif %} style="width:auto;"> Zelle only
+        <span class="label-spacer">‌</span>
+        <label class="filter-checkbox-label">
+          <input type="checkbox" name="only_zelle" value="1" {% if filter_state.only_zelle %}checked{% endif %}> Zelle only
         </label>
         <button type="submit">Apply</button>
       </div>

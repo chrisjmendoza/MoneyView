@@ -644,6 +644,7 @@
       .confidence-meter span {
         display: block;
         height: 100%;
+        width: var(--meter-w, 0%);
         background: linear-gradient(90deg, #d97706 0%, #0f766e 100%);
         border-radius: inherit;
       }
@@ -770,6 +771,9 @@
       /* Collapsible details without browser disclosure triangle */
       .details-clean > summary {
         list-style: none;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 1rem;
       }
 
       .details-clean > summary::-webkit-details-marker {
@@ -921,6 +925,161 @@
           width: 42%;
         }
       }
+
+      /* ── Shared utility classes ── */
+
+      /* Replaces repeated label style attrs in bills/transactions */
+      .field-label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+      }
+
+      /* Small muted metadata text (dates, split labels) */
+      .meta-text {
+        font-size: 0.85rem;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      /* Note text below a card item (bill notes, review notes) */
+      .card-note {
+        margin: 0.35rem 0 0;
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+
+      /* Full-card empty state placeholder */
+      .empty-state {
+        text-align: center;
+        padding: 2.5rem;
+        color: var(--muted);
+      }
+
+      /* Empty table cell placeholder */
+      .empty-cell {
+        text-align: center;
+        padding: 2rem;
+      }
+
+      /* Flex row with space-between (delete/save footer) */
+      .row-between {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      /* Flex row wrapping (shared + split count) */
+      .flex-wrap-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      /* Compact flex row (split-count label + input) */
+      .flex-row-sm {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      /* Narrow number inputs (split count) */
+      .input-narrow { width: 5rem; }
+
+      /* Action button that should not stretch full-width */
+      .btn-action {
+        max-width: 12rem;
+        width: auto;
+      }
+
+      /* Destructive action button (delete) */
+      .btn-warn {
+        background: rgba(180, 83, 9, 0.10);
+        color: var(--warn);
+        border: 1px solid rgba(180, 83, 9, 0.2);
+        width: auto;
+        padding: 0.5rem 0.9rem;
+      }
+
+      /* Max-width form container */
+      .form-narrow { max-width: 42rem; }
+
+      /* Dim inactive table rows */
+      .row-inactive { opacity: 0.45; }
+
+      /* Dashboard window-selector active tab */
+      .window-active { background: var(--accent-soft); }
+
+      /* Warn-colored badge inside .review-badges */
+      .review-badges .badge-warn {
+        background: rgba(180, 83, 9, 0.12);
+        color: var(--warn);
+      }
+
+      /* Invisible spacer label to align filter-bar rows */
+      .label-spacer {
+        display: block;
+        visibility: hidden;
+        font-size: 0.82rem;
+        margin-bottom: 0.3rem;
+      }
+
+      /* Checkbox-as-filter-label (Zelle toggle) */
+      .filter-checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+      }
+
+      .filter-checkbox-label input { width: auto; }
+
+      /* Filter bar button column */
+      .filter-actions {
+        display: flex;
+        align-items: flex-end;
+        gap: 0.4rem;
+      }
+
+      /* Filter submit button (not full-width) */
+      .btn-filter {
+        white-space: nowrap;
+        width: auto;
+        padding: 0.65rem 1rem;
+      }
+
+      /* "Clear" link styled to match filter button height */
+      .btn-clear {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.65rem 0.85rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #fff;
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 0.9rem;
+        white-space: nowrap;
+      }
+
+      /* Transactions page filter grid (7 columns) */
+      .filter-grid-transactions {
+        grid-template-columns: 1.2fr 1fr 1.4fr 1fr auto auto auto;
+      }
+
+      /* Pagination row count text */
+      .pagination-meta {
+        margin: 0;
+        font-size: 0.9rem;
+      }
+
+      .text-sm { font-size: 0.85rem; }
     </style>
   </head>
   <body>

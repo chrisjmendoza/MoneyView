@@ -25,7 +25,7 @@
       </thead>
       <tbody>
         {% for rule in rules %}
-        <tr {% if not rule.active %}style="opacity: 0.45;"{% endif %}>
+        <tr class="{% if not rule.active %}row-inactive{% endif %}">
           <td class="nowrap">{{ rule.priority }}</td>
           <td class="wrap-cell"><code>{{ rule.pattern }}</code></td>
           <td class="nowrap">{{ rule.match_type }}</td>
@@ -38,7 +38,7 @@
               <span class="status-badge status-review">Disabled</span>
             {% endif %}
           </td>
-          <td class="wrap-cell muted" style="font-size:0.85rem;">{{ rule.notes or "" }}</td>
+          <td class="wrap-cell muted text-sm">{{ rule.notes or "" }}</td>
 
           <td class="rule-actions">
             <div class="rule-action-buttons">
@@ -99,7 +99,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="muted" style="text-align:center; padding:2rem;">No rules yet. Create rules from the Review Queue.</td>
+          <td colspan="8" class="muted empty-cell">No rules yet. Create rules from the Review Queue.</td>
         </tr>
         {% endfor %}
       </tbody>

@@ -38,6 +38,14 @@ Daily running journal of work completed on MoneyView.
 - Added plain-English help text and tooltip guidance for rule priority so users can safely keep defaults.
 - Updated user-facing LOC wording to Line of Credit across dashboard/import labels, warnings, and seeded account naming.
 - Replaced the fragile native browser tooltip with a reliable in-app hover/focus tooltip for rule-priority help.
+- Added retroactive rule application to the review queue: when saving a rule, an "Also apply to other matching transactions" checkbox (checked by default) bulk-updates all other matching review-queue transactions in one step. Contains/exact rules use a single SQL UPDATE; regex rules iterate in Python. The flash message reports how many extra transactions were cleared.
+- Fixed amount display in the review queue: debits now render as −$45.23 and credits as +$12.00 with color classes, replacing the raw signed number.
+- Fixed the Zelle filter-bar row alignment in the review queue by adding an invisible spacer label above the checkbox.
+- Added active nav-pill highlighting to the site header: the current page's pill is now filled teal using `request.endpoint` comparison in the base template.
+- Removed the generic subtitle placeholder from the base template header.
+- Added new page routes: `/transactions` (full transaction browser with filter/pagination/inline edit), `/rules` (rules management table with enable/disable/delete/inline edit), `/bills` (recurring bills CRUD). All three are linked in the site nav.
+- Styled the file upload input on the Import page as a custom button+filename component instead of the default browser file picker.
+- Added inline CSS cleanup: replaced all `style=""` attributes across every template with 23 new utility CSS classes in `base.html` (`.field-label`, `.meta-text`, `.card-note`, `.empty-state`, `.empty-cell`, `.row-between`, `.flex-wrap-row`, `.flex-row-sm`, `.input-narrow`, `.btn-action`, `.btn-warn`, `.form-narrow`, `.row-inactive`, `.window-active`, `.badge-warn`, `.label-spacer`, `.filter-checkbox-label`, `.filter-actions`, `.btn-filter`, `.btn-clear`, `.filter-grid-transactions`, `.pagination-meta`, `.text-sm`). The only remaining inline style is the confidence meter's `--meter-w` CSS custom property, which is inherently dynamic.
 - Added an inline "add new category" option in the review form so users can create and apply categories without leaving the queue.
 - Added backend support to create or reuse matching category names safely (case-insensitive) during review saves.
 - Completed a deep review-card redesign for space efficiency: compact transaction summary, cleaner decision panel, lighter visual density, and improved action placement.

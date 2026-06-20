@@ -5,9 +5,9 @@
     <h2>View Window</h2>
     <p class="hero-detail">The dashboard only summarizes the selected window below, not the entire import history. Your import validation summary shows what landed in the database overall.</p>
     <nav>
-      <a href="/?window=current_pay_period" {% if dashboard.window == "current_pay_period" %}style="background: var(--accent-soft);"{% endif %}>Current Pay Period</a>
-      <a href="/?window=previous_pay_period" {% if dashboard.window == "previous_pay_period" %}style="background: var(--accent-soft);"{% endif %}>Previous Pay Period</a>
-      <a href="/?window=current_month" {% if dashboard.window == "current_month" %}style="background: var(--accent-soft);"{% endif %}>Current Month</a>
+      <a href="/?window=current_pay_period" class="{% if dashboard.window == 'current_pay_period' %}window-active{% endif %}">Current Pay Period</a>
+      <a href="/?window=previous_pay_period" class="{% if dashboard.window == 'previous_pay_period' %}window-active{% endif %}">Previous Pay Period</a>
+      <a href="/?window=current_month" class="{% if dashboard.window == 'current_month' %}window-active{% endif %}">Current Month</a>
     </nav>
     <p class="muted">Showing {{ dashboard.range.start }} to {{ dashboard.range.end }}.</p>
   </section>
@@ -23,7 +23,7 @@
     <article class="card hero-card">
       <p class="eyebrow">Data Quality Status</p>
       <p class="hero-value">{{ "%.0f"|format(dashboard.data_confidence.percent_categorized) }}%</p>
-      <div class="confidence-meter"><span style="width: {{ dashboard.data_confidence.percent_categorized }}%;"></span></div>
+      <div class="confidence-meter"><span style="--meter-w: {{ dashboard.data_confidence.percent_categorized }}%;"></span></div>
       <div class="metric-list">
         <p class="hero-detail">Current window: {{ dashboard.data_confidence.categorized_transactions }} of {{ dashboard.data_confidence.total_transactions }} categorized.</p>
         <p class="hero-detail">Needs review now: {{ dashboard.data_confidence.needs_review_count }} transactions totaling ${{ "%.2f"|format(dashboard.data_confidence.needs_review_total) }}.</p>

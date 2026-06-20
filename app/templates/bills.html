@@ -9,23 +9,23 @@
 
   {# Add new bill form #}
   <details class="card mb-2 details-clean">
-    <summary style="cursor:pointer; font-weight:600; font-size:1rem;">+ Add new bill</summary>
-    <form method="post" action="/bills" class="stack mt-1" style="max-width: 42rem;">
+    <summary>+ Add new bill</summary>
+    <form method="post" action="/bills" class="stack mt-1 form-narrow">
       <div class="review-form-grid">
         <div>
-          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Name</label>
+          <label class="field-label">Name</label>
           <input type="text" name="name" placeholder="e.g. Rent" required>
         </div>
         <div>
-          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Amount ($)</label>
+          <label class="field-label">Amount ($)</label>
           <input type="number" name="expected_amount" step="0.01" placeholder="0.00" required>
         </div>
         <div>
-          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Due day of month</label>
+          <label class="field-label">Due day of month</label>
           <input type="number" name="due_day" min="1" max="31" placeholder="1" required>
         </div>
         <div>
-          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Frequency</label>
+          <label class="field-label">Frequency</label>
           <select name="frequency">
             <option value="monthly">Monthly</option>
             <option value="annual">Annual</option>
@@ -33,7 +33,7 @@
           </select>
         </div>
         <div>
-          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Category</label>
+          <label class="field-label">Category</label>
           <select name="category_id">
             <option value="">— none —</option>
             {% for cat in categories %}
@@ -42,7 +42,7 @@
           </select>
         </div>
         <div>
-          <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Account</label>
+          <label class="field-label">Account</label>
           <select name="account_id">
             <option value="">— none —</option>
             {% for acct in accounts %}
@@ -51,20 +51,20 @@
           </select>
         </div>
       </div>
-      <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+      <div class="flex-wrap-row">
         <label class="checkbox-inline">
           <input type="checkbox" name="is_shared" value="1"> Shared expense
         </label>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <span style="font-size:0.85rem; color:var(--muted);">Split count:</span>
-          <input type="number" name="split_count" min="2" max="10" style="width:5rem;">
+        <div class="flex-row-sm">
+          <span class="meta-text">Split count:</span>
+          <input type="number" name="split_count" min="2" max="10" class="input-narrow">
         </div>
       </div>
       <div>
-        <label style="display:block; font-size:0.8rem; font-weight:600; color:var(--muted); margin-bottom:0.25rem;">Notes</label>
+        <label class="field-label">Notes</label>
         <input type="text" name="notes" placeholder="Optional">
       </div>
-      <button type="submit" style="max-width:12rem;">Add bill</button>
+      <button type="submit" class="btn-action">Add bill</button>
     </form>
   </details>
 
@@ -79,17 +79,17 @@
         <div class="review-transaction">
           <div class="review-headline">
             <p class="review-amount">${{ "%.2f"|format(bill.expected_amount|float) }}</p>
-            <span class="muted" style="font-size:0.85rem;">Due day {{ bill.due_day }} · {{ bill.frequency }}</span>
+            <span class="meta-text">Due day {{ bill.due_day }} · {{ bill.frequency }}</span>
           </div>
           <p class="review-description"><strong>{{ bill.name }}</strong></p>
           <div class="review-badges">
             {% if bill.category_name %}<span>{{ bill.category_name }}</span>{% endif %}
             {% if bill.account_name %}<span>{{ bill.account_name }}</span>{% endif %}
             {% if bill.is_shared %}<span>Shared ÷ {{ bill.split_count or "?" }}</span>{% endif %}
-            {% if not bill.active %}<span style="background:rgba(180,83,9,0.12); color:var(--warn);">Inactive</span>{% endif %}
+            {% if not bill.active %}<span class="badge-warn">Inactive</span>{% endif %}
           </div>
           {% if bill.notes %}
-          <p style="margin:0.35rem 0 0; font-size:0.82rem; color:var(--muted);">{{ bill.notes }}</p>
+          <p class="card-note">{{ bill.notes }}</p>
           {% endif %}
         </div>
 
@@ -135,13 +135,13 @@
               </select>
             </div>
           </div>
-          <div style="display:flex; gap:1rem; align-items:center; flex-wrap:wrap;">
+          <div class="flex-wrap-row">
             <label class="checkbox-inline">
               <input type="checkbox" name="is_shared" value="1" {% if bill.is_shared %}checked{% endif %}> Shared
             </label>
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-              <span style="font-size:0.85rem; color:var(--muted);">Split count:</span>
-              <input type="number" name="split_count" min="2" max="10" value="{{ bill.split_count or '' }}" style="width:5rem;">
+            <div class="flex-row-sm">
+              <span class="meta-text">Split count:</span>
+              <input type="number" name="split_count" min="2" max="10" value="{{ bill.split_count or '' }}" class="input-narrow">
             </div>
             <label class="checkbox-inline">
               <input type="checkbox" name="active" value="1" {% if bill.active %}checked{% endif %}> Active
@@ -151,11 +151,11 @@
             <label>Notes</label>
             <input type="text" name="notes" value="{{ bill.notes or '' }}">
           </div>
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="row-between">
             <form method="post" action="/bills/{{ bill.id }}/delete" class="inline" onsubmit="return confirm('Delete {{ bill.name }}?');">
-              <button type="submit" style="background:rgba(180,83,9,0.10); color:var(--warn); border:1px solid rgba(180,83,9,0.2); width:auto; padding:0.5rem 0.9rem;">Delete</button>
+              <button type="submit" class="btn-warn">Delete</button>
             </form>
-            <button type="submit" style="max-width:10rem;">Save changes</button>
+            <button type="submit" class="btn-action">Save changes</button>
           </div>
         </form>
 
@@ -164,7 +164,7 @@
     {% endfor %}
   </div>
   {% else %}
-  <div class="card" style="text-align:center; padding:2.5rem; color:var(--muted);">
+  <div class="card empty-state">
     No recurring bills yet. Add one above to include it in safe-to-spend calculations.
   </div>
   {% endif %}
