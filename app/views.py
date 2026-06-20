@@ -26,6 +26,7 @@ def _coerce_positive_int(raw_value: str | None, default: int, *, max_value: int 
 
 
 def _read_review_filter_state(source) -> dict:
+    raw_scroll_y = (source.get("scroll_y", "") or source.get("next_scroll_y", "")).strip()
     return {
         "account_id": source.get("account_id", ""),
         "transaction_class": source.get("transaction_class", ""),
@@ -33,6 +34,7 @@ def _read_review_filter_state(source) -> dict:
         "only_zelle": source.get("only_zelle") == "1",
         "limit": _coerce_positive_int(source.get("limit"), 25, max_value=100),
         "page": _coerce_positive_int(source.get("page"), 1),
+        "scroll_y": raw_scroll_y if raw_scroll_y.isdigit() else "",
     }
 
 
@@ -65,6 +67,8 @@ def _build_review_redirect_params(filter_state: dict) -> dict:
     }
     if filter_state["only_zelle"]:
         redirect_params["only_zelle"] = "1"
+    if filter_state.get("scroll_y"):
+        redirect_params["scroll_y"] = filter_state["scroll_y"]
     return redirect_params
 
 
@@ -256,6 +260,8 @@ def import_transactions() -> str:
 def review_queue() -> str:
     database = get_db()
     filter_state = _read_review_filter_state(request.args)
+    raw_scroll_y = request.args.get("scroll_y", "").strip()
+    restored_scroll_y = raw_scroll_y if raw_scroll_y.isdigit() else ""
     where_sql, params = _build_review_query_parts(filter_state)
 
     total_review_count = database.execute(
@@ -308,6 +314,7 @@ def review_queue() -> str:
             "previous_page": filter_state["page"] - 1,
             "next_page": filter_state["page"] + 1,
         },
+        restored_scroll_y=restored_scroll_y,
     )
 
 
@@ -326,6 +333,7 @@ def update_review(transaction_id: str) -> str:
             "only_zelle": request.form.get("next_only_zelle", "0"),
             "limit": request.form.get("next_limit", "25"),
             "page": request.form.get("next_page", "1"),
+            "scroll_y": request.form.get("next_scroll_y", ""),
         }
     )
 

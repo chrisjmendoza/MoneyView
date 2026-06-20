@@ -30,6 +30,10 @@ Daily running journal of work completed on MoneyView.
 - Added backend support to create or reuse matching category names safely (case-insensitive) during review saves.
 - Completed a deep review-card redesign for space efficiency: compact transaction summary, cleaner decision panel, lighter visual density, and improved action placement.
 - Added an inline "Add new category" details flow to keep advanced inputs available without cluttering the primary review path.
+- Added a dedicated view-route test suite covering dashboard/settings/bills/contacts/import/review endpoints and key redirect/error branches.
+- Increased overall automated test coverage from 80% to 88%, with view-layer coverage improved from 55% to 90%.
+- Fixed review-save scroll behavior by preserving and restoring scroll position so saving a card no longer jumps you to the top of the page.
+- Added VS Code testing workspace settings for pytest discovery and one-click test runs from the editor.
 - Fixed parsing for BECU dates that use two-digit years.
 - Fixed mixed-account CSV imports so rows are filtered to the selected account instead of being imported wholesale.
 - Fixed a dashboard service indentation regression introduced during refactoring.

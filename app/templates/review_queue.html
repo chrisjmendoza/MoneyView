@@ -65,6 +65,7 @@
             <input type="hidden" name="next_limit" value="{{ filter_state.limit }}">
             <input type="hidden" name="next_page" value="{{ filter_state.page }}">
             <input type="hidden" name="next_only_zelle" value="{% if filter_state.only_zelle %}1{% else %}0{% endif %}">
+            <input type="hidden" name="next_scroll_y" value="">
             <div class="review-main-grid">
               <div class="review-transaction">
                 <div class="review-headline">
@@ -201,9 +202,18 @@
   </section>
 
   <script>
+    const restoredScrollY = {{ restored_scroll_y or 'null' }};
+    if (restoredScrollY !== null) {
+      window.scrollTo({ top: Number(restoredScrollY), behavior: "auto" });
+      const url = new URL(window.location.href);
+      url.searchParams.delete("scroll_y");
+      window.history.replaceState({}, "", url.pathname + (url.search ? `?${url.searchParams.toString()}` : ""));
+    }
+
     for (const form of document.querySelectorAll(".review-form")) {
       const toggle = form.querySelector(".rule-toggle-input");
       const ruleBuilder = form.querySelector(".rule-builder");
+      const nextScrollInput = form.querySelector("input[name='next_scroll_y']");
       if (!toggle || !ruleBuilder) {
         continue;
       }
@@ -214,6 +224,11 @@
 
       syncRuleBuilder();
       toggle.addEventListener("change", syncRuleBuilder);
+      form.addEventListener("submit", () => {
+        if (nextScrollInput) {
+          nextScrollInput.value = String(window.scrollY || 0);
+        }
+      });
     }
   </script>
 {% endblock %}
