@@ -2,7 +2,7 @@ import os
 import secrets
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, flash, redirect, url_for
 
 from .db import init_app
 
@@ -28,6 +28,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.from_mapping(
         DATABASE_PATH=data_dir / "moneyview.sqlite3",
         SECRET_KEY=_load_or_create_secret_key(data_dir),
+        MAX_CONTENT_LENGTH=10 * 1024 * 1024,  # 10 MB hard cap on uploads
     )
 
     if test_config:
@@ -38,4 +39,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     from .views import bp
 
     app.register_blueprint(bp)
+
+    @app.errorhandler(413)
+    def upload_too_large(_err):
+        flash("Upload rejected: file exceeds the 10 MB size limit.", "error")
+        return redirect(url_for("moneyview.import_transactions")), 413
+
     return app

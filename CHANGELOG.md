@@ -2,6 +2,20 @@
 
 Daily running journal of work completed on MoneyView.
 
+## 2026-06-20 (session 3)
+
+### Stuff Done
+- Built `/imports` — import history page listing every past CSV import with account, profile, file name, row counts, and a Rollback button. Rollback deletes all transactions sourced from that import (via `source_import_id` FK) then removes the import record in one atomic transaction. Added Imports to the site nav.
+- Fixed bill frequency calculation in `compute_bills_due_before_next_paycheck` to support weekly and annual bills. Weekly bills count `(days_until_payday // 7)` occurrences per period. Annual bills require a `due_month` (1–12) in addition to `due_day`; the column is added via `ensure_integrity_columns` migration. Both the "Add bill" and "Edit bill" forms now include a Due Month selector, visible for all frequencies and required for annual.
+- Made payroll description detection configurable: replaced the hardcoded `SOUND PROP` string in `build_sanity_warnings` with a `payroll_description_hint` user setting. Added field to the dashboard Pay Settings form, seeded empty default, and wired through `build_dashboard` and `save_settings`.
+- Fixed `top_categories` SQL query to net out refunds: changed from `amount < 0 AND class = 'expense'` to `class IN ('expense', 'refund')` with a CASE expression so positive refund amounts reduce the category total. Categories with zero or negative net spend are excluded via `HAVING total_spend > 0`.
+- Removed the unused `FOOD_CATEGORIES = (...)` Python constant from `dashboard_service.py` (the SQL always referenced the names directly; the constant was dead code).
+- Added `/transactions/export` — downloads all transactions matching the current filter state as a CSV file named `moneyview-export-YYYY-MM-DD.csv`. Added an Export CSV button to the transactions page filter bar.
+- Added input validation to `/settings` POST: validates `payday_anchor` as a real ISO date and validates decimal fields (`normal_paycheck_amount`, `checking_floor`, `manual_bills_due_before_next_paycheck`) before touching the DB. Returns a flash error on invalid input.
+- Added net worth to the dashboard: `compute_net_worth()` sums checking/savings/cash balances and subtracts credit card/line of credit/loan balances from the latest snapshot per account. Displayed as a hero card between the view-window cards and the sanity checks section.
+- Added 3-month spending trend to the dashboard: `spending_trend_by_month()` returns monthly gross expense, refund, and net spend for the last 3 calendar months using SQLite's `strftime`. Shown as a compact table before the balance/settings section.
+- Set `MAX_CONTENT_LENGTH = 10 MB` on the Flask app to cap CSV upload size. Added a 413 error handler that flashes a descriptive error and redirects back to the import page.
+
 ## 2026-06-20
 
 ### Stuff Done

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-review">
+
+  <div class="mb-2">
+    <h2 class="section-heading">Import History</h2>
+    <p class="import-lede">Every CSV import is recorded here. Rolling back an import permanently deletes its transactions — including any categories or rules you set on them. This cannot be undone.</p>
+  </div>
+
+  {% if imports %}
+  <div class="table-scroll">
+    <table class="compact-table table-compact">
+      <thead>
+        <tr>
+          <th class="nowrap">Imported</th>
+          <th>File</th>
+          <th>Account</th>
+          <th>Profile</th>
+          <th class="nowrap">Rows Read</th>
+          <th class="nowrap">New</th>
+          <th class="nowrap">Dupes</th>
+          <th class="nowrap">Review</th>
+          <th class="nowrap">Errors</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for imp in imports %}
+        <tr>
+          <td class="nowrap">{{ imp.imported_at[:16] }}</td>
+          <td class="wrap-cell">{{ imp.source_file_name }}</td>
+          <td class="nowrap">{{ imp.account_name }}</td>
+          <td class="nowrap">{{ imp.profile_name }}</td>
+          <td class="nowrap">{{ imp.rows_read }}</td>
+          <td class="nowrap">{{ imp.new_transactions }}</td>
+          <td class="nowrap">{{ imp.duplicates_skipped }}</td>
+          <td class="nowrap">{{ imp.needs_review_count }}</td>
+          <td class="nowrap">{{ imp.errors_count }}</td>
+          <td class="nowrap">
+            <form method="post" action="/imports/{{ imp.id }}/rollback" class="inline"
+                  onsubmit="return confirm('Roll back this import? This will permanently delete {{ imp.new_transactions }} transaction(s) from {{ imp.source_file_name }}.');">
+              <button type="submit" class="btn-pill btn-pill-warn">Rollback</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card empty-state">
+    No imports yet. Go to <a href="/import">Import</a> to load your first CSV.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

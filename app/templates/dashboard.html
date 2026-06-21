@@ -48,6 +48,12 @@
     </article>
   </section>
 
+  <section class="card mb-2 page-dashboard">
+    <p class="eyebrow">Net Worth (from balance snapshots)</p>
+    <p class="hero-value {% if dashboard.net_worth < 0 %}negative{% endif %}">${{ "%.2f"|format(dashboard.net_worth|abs) }}{% if dashboard.net_worth < 0 %} (negative){% endif %}</p>
+    <p class="hero-detail">Assets (checking, savings, cash) minus liabilities (credit cards, lines of credit, loans) based on your most recent balance snapshot per account.</p>
+  </section>
+
   <section class="card mb-2 stack page-dashboard">
     <h2>Dashboard Sanity Checks</h2>
     {% if dashboard.sanity_warnings %}
@@ -179,6 +185,35 @@
     </article>
   </section>
 
+  <section class="card mt-1 page-dashboard">
+    <h2 class="section-heading">3-Month Spending Trend</h2>
+    <p class="hero-detail">Net expense per calendar month for the last 3 months (expenses minus refunds). Does not filter by the window selector above.</p>
+    {% if dashboard.spending_trend %}
+    <table class="table-compact mt-1">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Gross Expenses</th>
+          <th>Refunds</th>
+          <th>Net Spend</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in dashboard.spending_trend %}
+        <tr>
+          <td class="nowrap">{{ row.month }}</td>
+          <td>${{ "%.2f"|format(row.gross_expense or 0) }}</td>
+          <td>${{ "%.2f"|format(row.refunds or 0) }}</td>
+          <td><strong>${{ "%.2f"|format(row.net_spend or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No expense data in the last 3 months.</p>
+    {% endif %}
+  </section>
+
   <section class="grid two-col-even mt-1 page-dashboard">
     <article class="card stack">
       <h2>Manual Balance Snapshots</h2>
@@ -233,6 +268,8 @@
         <input id="checking-floor" type="number" step="0.01" name="checking_floor" value="{{ dashboard.settings.checking_floor }}" required>
         <label for="manual-bills-due">Manual Bills Due Before Next Paycheck</label>
         <input id="manual-bills-due" type="number" step="0.01" name="manual_bills_due_before_next_paycheck" value="{{ dashboard.settings.manual_bills_due_before_next_paycheck }}" required>
+        <label for="payroll-hint">Payroll Description Keyword</label>
+        <input id="payroll-hint" type="text" name="payroll_description_hint" value="{{ dashboard.settings.payroll_description_hint or '' }}" placeholder="e.g. SOUND PROP, DIRECT DEP">
         <button type="submit">Save Settings</button>
       </form>
     </article>

@@ -60,6 +60,7 @@
 
   {# Pagination bar #}
   <div class="pagination-bar mb-2">
+    <a href="/transactions/export?{{ request.query_string.decode() }}" class="btn-clear">Export CSV</a>
     <p class="muted pagination-meta">
       {% if total_count %}
         Showing {{ shown_start }}–{{ shown_end }} of {{ total_count }} transactions

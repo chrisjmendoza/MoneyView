@@ -2,7 +2,12 @@ from datetime import date
 import re
 import uuid
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+import csv
+import io
+from datetime import date as _date
+from decimal import Decimal, InvalidOperation
+
+from flask import Blueprint, Response, flash, redirect, render_template, request, url_for
 
 from .db import get_db
 from .services.categorization_service import create_rule_from_review
@@ -204,6 +209,19 @@ def save_balance() -> str:
 
 @bp.post("/settings")
 def save_settings() -> str:
+    # Validate before touching the DB
+    try:
+        _date.fromisoformat(request.form["payday_anchor"])
+    except (ValueError, KeyError):
+        flash("Payday Anchor must be a valid date in YYYY-MM-DD format.", "error")
+        return redirect(url_for("moneyview.dashboard"))
+    for decimal_key in ("normal_paycheck_amount", "checking_floor", "manual_bills_due_before_next_paycheck"):
+        try:
+            Decimal(request.form.get(decimal_key, "0"))
+        except InvalidOperation:
+            flash(f"'{decimal_key}' must be a number.", "error")
+            return redirect(url_for("moneyview.dashboard"))
+
     database = get_db()
     for setting_key in (
         "pay_frequency",
@@ -211,6 +229,7 @@ def save_settings() -> str:
         "payday_anchor",
         "checking_floor",
         "manual_bills_due_before_next_paycheck",
+        "payroll_description_hint",
     ):
         database.execute(
             """
@@ -218,7 +237,7 @@ def save_settings() -> str:
             values (?, ?, ?, ?)
             on conflict(setting_key) do update set setting_value = excluded.setting_value, updated_at = current_timestamp
             """,
-            (f"setting-{setting_key}", setting_key, request.form[setting_key], "Updated from dashboard."),
+            (f"setting-{setting_key}", setting_key, request.form.get(setting_key, ""), "Updated from dashboard."),
         )
     database.commit()
     flash("Settings saved.", "success")
@@ -231,14 +250,15 @@ def create_bill() -> str:
     database.execute(
         """
         insert into recurring_bills (
-          id, name, expected_amount, due_day, frequency, category_id, account_id, is_shared, split_count, active, notes
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+          id, name, expected_amount, due_day, due_month, frequency, category_id, account_id, is_shared, split_count, active, notes
+        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         """,
         (
             f"bill-{uuid.uuid4().hex}",
             request.form["name"],
             request.form["expected_amount"],
             request.form["due_day"],
+            request.form.get("due_month") or None,
             request.form["frequency"],
             request.form.get("category_id") or None,
             request.form.get("account_id") or None,
@@ -351,6 +371,7 @@ def edit_bill(bill_id: str) -> str:
         set name = ?,
             expected_amount = ?,
             due_day = ?,
+            due_month = ?,
             frequency = ?,
             category_id = ?,
             account_id = ?,
@@ -365,6 +386,7 @@ def edit_bill(bill_id: str) -> str:
             request.form["name"],
             request.form["expected_amount"],
             request.form["due_day"],
+            request.form.get("due_month") or None,
             request.form["frequency"],
             request.form.get("category_id") or None,
             request.form.get("account_id") or None,
@@ -482,6 +504,80 @@ def transactions_list() -> str:
             "previous_page": page - 1,
             "next_page": page + 1,
         },
+    )
+
+
+@bp.get("/transactions/export")
+def export_transactions() -> Response:
+    database = get_db()
+
+    account_id = request.args.get("account_id", "")
+    transaction_class = request.args.get("transaction_class", "")
+    search = request.args.get("search", "").strip()
+    category_id = request.args.get("category_id", "")
+    date_from = request.args.get("date_from", "")
+    date_to = request.args.get("date_to", "")
+
+    where_clauses = ["1=1"]
+    params: list = []
+
+    if account_id:
+        where_clauses.append("transactions.account_id = ?")
+        params.append(account_id)
+    if transaction_class:
+        where_clauses.append("transactions.transaction_class = ?")
+        params.append(transaction_class)
+    if search:
+        where_clauses.append("upper(transactions.description) like ?")
+        params.append(f"%{search.upper()}%")
+    if category_id == "__uncategorized__":
+        where_clauses.append("transactions.category_id is null")
+    elif category_id:
+        where_clauses.append("transactions.category_id = ?")
+        params.append(category_id)
+    if date_from:
+        where_clauses.append("transactions.transaction_date >= ?")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("transactions.transaction_date <= ?")
+        params.append(date_to)
+
+    where_sql = " and ".join(where_clauses)
+    rows = database.execute(
+        f"""
+        select transactions.transaction_date, transactions.description,
+               transactions.amount, transactions.transaction_class,
+               categories.name as category_name, accounts.name as account_name,
+               transactions.review_note, transactions.needs_review
+        from transactions
+        left join categories on categories.id = transactions.category_id
+        left join accounts on accounts.id = transactions.account_id
+        where {where_sql}
+        order by transactions.transaction_date desc, transactions.created_at desc
+        """,
+        params,
+    ).fetchall()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Date", "Description", "Amount", "Class", "Category", "Account", "Review Note", "Needs Review"])
+    for row in rows:
+        writer.writerow([
+            row["transaction_date"],
+            row["description"],
+            row["amount"],
+            row["transaction_class"],
+            row["category_name"] or "",
+            row["account_name"] or "",
+            row["review_note"] or "",
+            "yes" if row["needs_review"] else "no",
+        ])
+
+    filename = f"moneyview-export-{_date.today().isoformat()}.csv"
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -756,3 +852,44 @@ def update_review(transaction_id: str) -> str:
     total_pages = max((remaining_review_count - 1) // filter_state["limit"] + 1, 1)
     filter_state["page"] = min(filter_state["page"], total_pages)
     return redirect(url_for("moneyview.review_queue", **_build_review_redirect_params(filter_state)))
+
+
+# ── Import history + rollback ──────────────────────────────────────────────
+
+
+@bp.get("/imports")
+def imports_list() -> str:
+    database = get_db()
+    imports = database.execute(
+        """
+        select imports.*,
+               accounts.name as account_name,
+               import_profiles.name as profile_name
+        from imports
+        join accounts on accounts.id = imports.account_id
+        join import_profiles on import_profiles.id = imports.import_profile_id
+        order by imports.imported_at desc, imports.id desc
+        """
+    ).fetchall()
+    return render_template("imports.html", imports=imports)
+
+
+@bp.post("/imports/<import_id>/rollback")
+def rollback_import(import_id: str) -> str:
+    database = get_db()
+    row = database.execute(
+        "select source_file_name, new_transactions from imports where id = ?", (import_id,)
+    ).fetchone()
+    if not row:
+        flash("Import not found.", "error")
+        return redirect(url_for("moneyview.imports_list"))
+    database.execute("delete from transactions where source_import_id = ?", (import_id,))
+    deleted_count = database.execute("select changes() as n").fetchone()["n"]
+    database.execute("delete from imports where id = ?", (import_id,))
+    database.commit()
+    flash(
+        f"Rolled back import of '{row['source_file_name']}'. "
+        f"{deleted_count} transaction(s) removed.",
+        "success",
+    )
+    return redirect(url_for("moneyview.imports_list"))

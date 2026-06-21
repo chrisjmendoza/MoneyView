@@ -173,6 +173,7 @@ DEFAULT_SETTINGS = [
     ("payday_anchor", "2026-06-19", "Anchor payday for biweekly cadence."),
     ("checking_floor", "500", "Minimum cash buffer to retain in checking."),
     ("manual_bills_due_before_next_paycheck", "0", "Optional manual override for bills due before next payday."),
+    ("payroll_description_hint", "", "Keyword that appears in your paycheck transaction description (e.g. SOUND PROP). Used to detect missing paychecks."),
 ]
 
 

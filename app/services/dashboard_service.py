@@ -6,9 +6,6 @@ from .pay_period_service import calculate_pay_period
 from .safe_to_spend_service import calculate_safe_to_spend
 
 
-FOOD_CATEGORIES = ("Groceries", "Fast Food", "Restaurants")
-
-
 def resolve_window_range(window: str, today: date, pay_period: dict) -> tuple[date, date]:
     if window == "previous_pay_period":
         period_days = (pay_period["next_payday"] - pay_period["current_payday"]).days
@@ -45,6 +42,17 @@ def latest_balances(database: sqlite3.Connection) -> list[dict]:
     ).fetchall()
 
 
+def _next_monthly_due(today: date, due_day: int) -> date:
+    clamped = min(due_day, 28)
+    candidate = date(today.year, today.month, clamped)
+    if candidate < today:
+        if today.month == 12:
+            candidate = date(today.year + 1, 1, clamped)
+        else:
+            candidate = date(today.year, today.month + 1, clamped)
+    return candidate
+
+
 def compute_bills_due_before_next_paycheck(database: sqlite3.Connection, today: date, next_payday: date, manual_override: Decimal) -> Decimal:
     if manual_override > Decimal("0"):
         return manual_override
@@ -52,26 +60,43 @@ def compute_bills_due_before_next_paycheck(database: sqlite3.Connection, today: 
     total = Decimal("0")
     rows = database.execute(
         """
-        select expected_amount, due_day, is_shared, split_count
+        select expected_amount, due_day, due_month, frequency, is_shared, split_count
         from recurring_bills
-        where active = 1 and frequency = 'monthly'
+        where active = 1
         """
     ).fetchall()
+
+    days_until_payday = (next_payday - today).days
 
     for row in rows:
         due_amount = Decimal(str(row["expected_amount"]))
         if row["is_shared"] and row["split_count"]:
             due_amount = due_amount / Decimal(str(row["split_count"]))
 
-        due_date = date(today.year, today.month, min(int(row["due_day"]), 28))
-        if due_date < today:
-            if today.month == 12:
-                due_date = date(today.year + 1, 1, min(int(row["due_day"]), 28))
-            else:
-                due_date = date(today.year, today.month + 1, min(int(row["due_day"]), 28))
+        frequency = row["frequency"]
 
-        if today <= due_date < next_payday:
-            total += due_amount
+        if frequency == "monthly":
+            due_date = _next_monthly_due(today, int(row["due_day"]))
+            if today <= due_date < next_payday:
+                total += due_amount
+
+        elif frequency == "weekly":
+            # Count how many weekly occurrences fall before the next paycheck.
+            occurrences = max(days_until_payday // 7, 0)
+            total += due_amount * occurrences
+
+        elif frequency == "annual":
+            due_month = row["due_month"]
+            if not due_month:
+                continue
+            try:
+                due_date = date(today.year, int(due_month), min(int(row["due_day"]), 28))
+            except ValueError:
+                continue
+            if due_date < today:
+                due_date = date(today.year + 1, int(due_month), min(int(row["due_day"]), 28))
+            if today <= due_date < next_payday:
+                total += due_amount
 
     return total
 
@@ -87,6 +112,21 @@ def summarize_data_confidence(row: dict) -> dict:
         "needs_review_total": row["needs_review_total"],
         "percent_categorized": percent_categorized,
     }
+
+
+def compute_net_worth(balances: list) -> Decimal:
+    asset_types = {"checking", "savings", "cash"}
+    liability_types = {"credit_card", "line_of_credit", "loan"}
+    total = Decimal("0")
+    for balance in balances:
+        if balance["balance"] is None:
+            continue
+        amt = Decimal(str(balance["balance"]))
+        if balance["account_type"] in asset_types:
+            total += amt
+        elif balance["account_type"] in liability_types:
+            total -= amt
+    return total
 
 
 def latest_import_status(database: sqlite3.Connection) -> dict | None:
@@ -111,6 +151,27 @@ def latest_import_status(database: sqlite3.Connection) -> dict | None:
     ).fetchone()
 
 
+def spending_trend_by_month(database: sqlite3.Connection, num_months: int = 3) -> list[dict]:
+    rows = database.execute(
+        """
+        select
+          strftime('%Y-%m', transaction_date) as month,
+          round(sum(
+            case when amount < 0 then abs(amount) else -amount end
+          ), 2) as net_spend,
+          round(sum(case when amount < 0 then abs(amount) else 0 end), 2) as gross_expense,
+          round(sum(case when amount > 0 and transaction_class = 'refund' then amount else 0 end), 2) as refunds
+        from transactions
+        where transaction_class in ('expense', 'refund')
+          and transaction_date >= date('now', ? || ' months')
+        group by month
+        order by month asc
+        """,
+        (f"-{num_months}",),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def build_sanity_warnings(
     database: sqlite3.Connection,
     range_start_iso: str,
@@ -121,6 +182,7 @@ def build_sanity_warnings(
     bills_due_auto: Decimal,
     manual_bills_override: Decimal,
     data_confidence: dict,
+    payroll_description_hint: str = "",
 ) -> list[dict]:
     warnings: list[dict] = []
 
@@ -196,8 +258,13 @@ def build_sanity_warnings(
         )
 
     if normal_paycheck_amount > Decimal("0"):
+        hint_clause = ""
+        hint_params: list = []
+        if payroll_description_hint.strip():
+            hint_clause = "or upper(transactions.description) like ?"
+            hint_params = [f"%{payroll_description_hint.strip().upper()}%"]
         paycheck_count = database.execute(
-            """
+            f"""
             select count(*) as paycheck_count
             from transactions
             left join categories on categories.id = transactions.category_id
@@ -206,10 +273,10 @@ def build_sanity_warnings(
               and (
                 categories.name = 'Paycheck'
                 or upper(transactions.description) like '%PAYROLL%'
-                or upper(transactions.description) like '%SOUND PROP%'
+                {hint_clause}
               )
             """,
-            (pay_period["current_payday"].isoformat(), pay_period["pay_period_end"].isoformat()),
+            (pay_period["current_payday"].isoformat(), pay_period["pay_period_end"].isoformat(), *hint_params),
         ).fetchone()["paycheck_count"]
         if int(paycheck_count or 0) == 0:
             warnings.append(
@@ -347,22 +414,26 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         bills_due_auto=bills_due_auto,
         manual_bills_override=manual_bills_override,
         data_confidence=data_confidence_row,
+        payroll_description_hint=settings.get("payroll_description_hint", ""),
     )
 
     top_categories = database.execute(
         """
         select coalesce(categories.name, 'Uncategorized') as category_name,
-               round(sum(abs(transactions.amount)), 2) as total_spend
+               round(sum(
+                 case when transactions.amount < 0 then abs(transactions.amount)
+                      else -transactions.amount
+                 end
+               ), 2) as total_spend
         from transactions
         left join categories on categories.id = transactions.category_id
-        where transactions.amount < 0
-          and transactions.transaction_class = 'expense'
+        where transactions.transaction_class in ('expense', 'refund')
           and transactions.transaction_date between ? and ?
         group by coalesce(categories.name, 'Uncategorized')
+        having total_spend > 0
         order by total_spend desc
         limit 10
-        """
-    ,
+        """,
         (range_start_iso, range_end_iso),
     ).fetchall()
 
@@ -396,6 +467,8 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         "summary": summary,
         "data_confidence": data_confidence,
         "all_data_confidence": all_data_confidence,
+        "net_worth": compute_net_worth(balances),
+        "spending_trend": spending_trend_by_month(database),
         "latest_import": latest_import_status(database),
         "top_categories": top_categories,
         "review_transactions": review_transactions,

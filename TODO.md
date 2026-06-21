@@ -19,26 +19,26 @@ Generated from multi-perspective analysis (user / developer / engineer / financi
 - [x] Transaction browser `/transactions` — all transactions, filterable, paginated (not just review queue)
 - [x] Edit any transaction from the browser (re-open review for already-reviewed transactions)
 - [x] Recurring bills management `/bills` — dedicated page, edit and delete existing bills
-- [ ] Import history + rollback — list past imports, delete an import and its transactions
+- [x] Import history + rollback — `/imports` page lists all past imports; rollback deletes transactions and import record
 
 ## Tier 3 — Financial Correctness Gaps
 
-- [ ] Net refunds against category totals in top-categories query (currently excludes positive-amount expense-class rows)
-- [ ] Weekly / annual bill frequency support in `compute_bills_due_before_next_paycheck`
-- [ ] Remove hardcoded `SOUND PROP` employer name from sanity warnings → make it a `payroll_description_hint` user setting
-- [ ] Remove hardcoded `FOOD_CATEGORIES` category name strings in dashboard_service → reference by ID
-- [ ] Multi-period trend view (3-month rolling category averages)
+- [x] Net refunds against category totals in top-categories query — expenses and refunds are now netted per category
+- [x] Weekly / annual bill frequency support in `compute_bills_due_before_next_paycheck` — `due_month` column added for annual bills
+- [x] Remove hardcoded `SOUND PROP` employer name from sanity warnings → `payroll_description_hint` user setting (configurable on dashboard)
+- [x] Remove unused `FOOD_CATEGORIES` dead code from dashboard_service
+- [x] 3-month spending trend — monthly gross/refund/net breakdown added to dashboard
 
 ## Tier 4 — Security
 
 - [ ] CSRF token on all POST forms (Flask session-based token, no external dep required)
-- [ ] Input validation on `/settings` POST — validate date format, decimal fields before DB write
-- [ ] Rate-limit or size-cap on `/import` CSV upload payload
+- [x] Input validation on `/settings` POST — date format and decimal fields validated before DB write
+- [x] Size cap on `/import` CSV upload — `MAX_CONTENT_LENGTH = 10 MB` with flash error on 413
 
 ## Tier 5 — Growth Features (Post-MVP)
 
 - [ ] Budget vs. actual per category (set monthly target, track vs. real spend)
-- [ ] Net worth snapshot view (assets − liabilities across all accounts)
+- [x] Net worth snapshot on dashboard — assets minus liabilities from latest balance snapshots
 - [ ] Annual projections from current pay-period rate
 - [ ] Spending trend sparklines per category
-- [ ] Export filtered transactions to CSV
+- [x] Export filtered transactions to CSV — `/transactions/export` respects all active filters

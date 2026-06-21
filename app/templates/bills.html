@@ -25,6 +25,15 @@
           <input type="number" name="due_day" min="1" max="31" placeholder="1" required>
         </div>
         <div>
+          <label class="field-label">Due month (annual only)</label>
+          <select name="due_month">
+            <option value="">— month —</option>
+            {% for m, mname in [(1,"Jan"),(2,"Feb"),(3,"Mar"),(4,"Apr"),(5,"May"),(6,"Jun"),(7,"Jul"),(8,"Aug"),(9,"Sep"),(10,"Oct"),(11,"Nov"),(12,"Dec")] %}
+            <option value="{{ m }}">{{ mname }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
           <label class="field-label">Frequency</label>
           <select name="frequency">
             <option value="monthly">Monthly</option>
@@ -107,6 +116,15 @@
             <div>
               <label>Due day</label>
               <input type="number" name="due_day" min="1" max="31" value="{{ bill.due_day }}" required>
+            </div>
+            <div>
+              <label>Due month (annual only)</label>
+              <select name="due_month">
+                <option value="">— month —</option>
+                {% for m, mname in [(1,"Jan"),(2,"Feb"),(3,"Mar"),(4,"Apr"),(5,"May"),(6,"Jun"),(7,"Jul"),(8,"Aug"),(9,"Sep"),(10,"Oct"),(11,"Nov"),(12,"Dec")] %}
+                <option value="{{ m }}" {% if bill.due_month and bill.due_month|int == m %}selected{% endif %}>{{ mname }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div>
               <label>Frequency</label>

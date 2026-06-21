@@ -47,6 +47,10 @@ def ensure_integrity_columns(database: sqlite3.Connection) -> None:
         row["name"]
         for row in database.execute("pragma table_info(import_profiles)").fetchall()
     }
+    bill_columns = {
+        row["name"]
+        for row in database.execute("pragma table_info(recurring_bills)").fetchall()
+    }
 
     if "merchant" not in transaction_columns:
         database.execute("alter table transactions add column merchant text")
@@ -58,6 +62,8 @@ def ensure_integrity_columns(database: sqlite3.Connection) -> None:
         database.execute("alter table import_profiles add column account_column text")
     if "type_column" not in import_profile_columns:
         database.execute("alter table import_profiles add column type_column text")
+    if "due_month" not in bill_columns:
+        database.execute("alter table recurring_bills add column due_month integer")
 
 
 def ensure_support_tables(database: sqlite3.Connection) -> None:
