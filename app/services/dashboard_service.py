@@ -151,6 +151,80 @@ def latest_import_status(database: sqlite3.Connection) -> dict | None:
     ).fetchone()
 
 
+def spending_trend_by_category_month(database: sqlite3.Connection, num_months: int = 3) -> dict:
+    rows = database.execute(
+        """
+        select
+          strftime('%Y-%m', transaction_date) as month,
+          coalesce(categories.name, 'Uncategorized') as category_name,
+          round(sum(
+            case when amount < 0 then abs(amount) else -amount end
+          ), 2) as net_spend
+        from transactions
+        left join categories on categories.id = transactions.category_id
+        where transaction_class in ('expense', 'refund')
+          and transaction_date >= date('now', ? || ' months')
+        group by month, category_name
+        having net_spend > 0
+        order by category_name asc, month asc
+        """,
+        (f"-{num_months}",),
+    ).fetchall()
+
+    all_months = sorted({r["month"] for r in rows})
+    cat_data: dict[str, dict[str, float]] = {}
+    for r in rows:
+        cat_data.setdefault(r["category_name"], {})[r["month"]] = float(r["net_spend"])
+
+    return {cat: [month_data.get(m, 0.0) for m in all_months] for cat, month_data in cat_data.items()}
+
+
+def compute_annual_projection(spending_trend: list[dict]) -> Decimal:
+    if not spending_trend:
+        return Decimal("0")
+    total = sum(Decimal(str(r["net_spend"] or 0)) for r in spending_trend)
+    return (total / len(spending_trend)) * 12
+
+
+def budget_vs_actual(database: sqlite3.Connection, year: int, month: int) -> list[dict]:
+    month_str = f"{year:04d}-{month:02d}"
+    rows = database.execute(
+        """
+        select
+          c.id as category_id,
+          c.name as category_name,
+          coalesce(cb.monthly_limit, 0) as monthly_limit,
+          coalesce(spend.total_spend, 0) as actual_spend
+        from categories c
+        left join category_budgets cb on cb.category_id = c.id
+        left join (
+          select category_id,
+                 round(sum(case when amount < 0 then abs(amount) else -amount end), 2) as total_spend
+          from transactions
+          where transaction_class in ('expense', 'refund')
+            and strftime('%Y-%m', transaction_date) = ?
+          group by category_id
+        ) spend on spend.category_id = c.id
+        where c.active = 1
+          and (cb.category_id is not null or spend.category_id is not null)
+        order by coalesce(spend.total_spend, 0) desc, c.name asc
+        """,
+        (month_str,),
+    ).fetchall()
+    result = []
+    for r in rows:
+        budget = Decimal(str(r["monthly_limit"]))
+        actual = Decimal(str(r["actual_spend"]))
+        result.append({
+            "category_id": r["category_id"],
+            "category_name": r["category_name"],
+            "budget": float(budget),
+            "actual": float(actual),
+            "pct": float(actual / budget * 100) if budget > 0 else None,
+        })
+    return result
+
+
 def spending_trend_by_month(database: sqlite3.Connection, num_months: int = 3) -> list[dict]:
     rows = database.execute(
         """
@@ -463,12 +537,15 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         """
     ).fetchall()
 
+    spending_trend = spending_trend_by_month(database)
     return {
         "summary": summary,
         "data_confidence": data_confidence,
         "all_data_confidence": all_data_confidence,
         "net_worth": compute_net_worth(balances),
-        "spending_trend": spending_trend_by_month(database),
+        "spending_trend": spending_trend,
+        "annual_projection": compute_annual_projection(spending_trend),
+        "category_sparklines": spending_trend_by_category_month(database),
         "latest_import": latest_import_status(database),
         "top_categories": top_categories,
         "review_transactions": review_transactions,

@@ -140,18 +140,30 @@
         <thead>
           <tr>
             <th>Category</th>
+            <th>3-mo trend</th>
             <th>Total</th>
           </tr>
         </thead>
         <tbody>
           {% for category in dashboard.top_categories %}
+            {% set spark = dashboard.category_sparklines.get(category.category_name, []) %}
+            {% set mx = (spark | max) if spark else 0 %}
             <tr>
               <td>{{ category.category_name }}</td>
+              <td>
+                {% if spark and mx > 0 %}
+                  <span class="sparkline">
+                    {% for val in spark %}
+                      <span class="spark-bar" style="--h: {{ ((val / mx) * 100) | round | int }}%"></span>
+                    {% endfor %}
+                  </span>
+                {% else %}—{% endif %}
+              </td>
               <td>${{ "%.2f"|format(category.total_spend or 0) }}</td>
             </tr>
           {% else %}
             <tr>
-              <td colspan="2">No spending yet.</td>
+              <td colspan="3">No spending yet.</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -183,6 +195,17 @@
         </tbody>
       </table>
     </article>
+  </section>
+
+  <section class="card mt-1 page-dashboard">
+    <h2 class="section-heading">Annual Projection</h2>
+    <p class="hero-detail">Extrapolated from the average monthly net spend over the last 3 months. Does not filter by the window selector above.</p>
+    {% if dashboard.spending_trend %}
+      <p class="hero-value {% if dashboard.annual_projection < 0 %}negative{% endif %}">${{ "%.2f"|format(dashboard.annual_projection|abs) }}/yr</p>
+      <p class="hero-detail">Based on {{ dashboard.spending_trend | length }} month(s) of expense data.</p>
+    {% else %}
+      <p class="muted">Not enough data for a projection yet.</p>
+    {% endif %}
   </section>
 
   <section class="card mt-1 page-dashboard">

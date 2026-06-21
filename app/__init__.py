@@ -1,10 +1,17 @@
+import hmac
 import os
 import secrets
 from pathlib import Path
 
-from flask import Flask, flash, redirect, url_for
+from flask import Flask, abort, flash, redirect, request, session, url_for
 
 from .db import init_app
+
+
+def generate_csrf_token() -> str:
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_hex(32)
+    return session["_csrf_token"]
 
 
 def _load_or_create_secret_key(data_dir: Path) -> str:
@@ -36,9 +43,21 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     init_app(app)
 
+    app.jinja_env.globals["csrf_token"] = generate_csrf_token
+
     from .views import bp
 
     app.register_blueprint(bp)
+
+    @app.before_request
+    def _csrf_check() -> None:
+        if app.testing:
+            return
+        if request.method == "POST":
+            token = request.form.get("_csrf_token", "")
+            expected = session.get("_csrf_token", "")
+            if not expected or not hmac.compare_digest(token, expected):
+                abort(403)
 
     @app.errorhandler(413)
     def upload_too_large(_err):

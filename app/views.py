@@ -12,7 +12,7 @@ from flask import Blueprint, Response, flash, redirect, render_template, request
 from .db import get_db
 from .services.categorization_service import create_rule_from_review
 from .services.constants import TRANSACTION_CLASSES
-from .services.dashboard_service import build_dashboard
+from .services.dashboard_service import budget_vs_actual, build_dashboard
 from .services.import_service import decode_upload, encode_upload, import_csv, normalize_merchant, preview_import
 
 
@@ -42,6 +42,33 @@ def _read_review_filter_state(source) -> dict:
         "page": _coerce_positive_int(source.get("page"), 1),
         "scroll_y": raw_scroll_y if raw_scroll_y.isdigit() else "",
     }
+
+
+def _group_transactions_by_merchant(transactions: list) -> list:
+    groups: dict[str, list] = {}
+    for txn in transactions:
+        merchant = (txn.get("merchant") or "").strip()
+        key = merchant.lower() if merchant else f"__{txn['id']}"
+        groups.setdefault(key, []).append(dict(txn))
+
+    result = []
+    for key, txns in groups.items():
+        merchant_name = txns[0].get("merchant") or None
+        total_amount = sum(t["amount"] for t in txns)
+        result.append({
+            "group_id": key,
+            "merchant": merchant_name,
+            "count": len(txns),
+            "transactions": txns,
+            "ids": [t["id"] for t in txns],
+            "total_amount": total_amount,
+            "is_grouped": len(txns) > 1,
+            "is_zelle": any(t.get("is_zelle") for t in txns),
+        })
+
+    multi = sorted([g for g in result if g["is_grouped"]], key=lambda g: abs(g["total_amount"]), reverse=True)
+    singles = [g for g in result if not g["is_grouped"]]
+    return multi + singles
 
 
 def _build_review_query_parts(filter_state: dict) -> tuple[str, list]:
@@ -739,11 +766,12 @@ def review_queue() -> str:
     accounts = database.execute("select * from accounts where active = 1 order by name asc").fetchall()
     categories = database.execute("select * from categories where active = 1 order by name asc").fetchall()
 
+    groups = _group_transactions_by_merchant(transactions)
     shown_start = offset + 1 if total_review_count else 0
     shown_end = min(offset + len(transactions), total_review_count)
     return render_template(
         "review_queue.html",
-        transactions=transactions,
+        groups=groups,
         accounts=accounts,
         categories=categories,
         transaction_classes=sorted(TRANSACTION_CLASSES),
@@ -762,6 +790,120 @@ def review_queue() -> str:
         },
         restored_scroll_y=restored_scroll_y,
     )
+
+
+@bp.post("/review/bulk")
+def bulk_review() -> str:
+    database = get_db()
+    raw_ids = request.form.get("transaction_ids", "")
+    transaction_ids = [i.strip() for i in raw_ids.split(",") if i.strip()]
+
+    if not transaction_ids:
+        flash("No transactions specified.", "error")
+        return redirect(url_for("moneyview.review_queue"))
+
+    category_id = request.form.get("category_id") or None
+    new_category_name = request.form.get("new_category_name", "")
+    transaction_class = request.form["transaction_class"]
+    review_note = request.form.get("review_note") or None
+
+    if transaction_class in {"ignore", "transfer"} and not category_id:
+        category_id = "category-transfers-ignore"
+
+    if new_category_name.strip():
+        category_id = _create_or_reuse_category(database, new_category_name)
+
+    for txn_id in transaction_ids:
+        database.execute(
+            """
+            update transactions
+            set category_id = ?, transaction_class = ?, needs_review = 0,
+                review_note = ?, updated_at = current_timestamp
+            where id = ?
+            """,
+            (category_id, transaction_class, review_note, txn_id),
+        )
+
+    backfill_count = 0
+    if request.form.get("create_rule"):
+        base_description = request.form.get("rule_source_description", "")
+        rule_mode = request.form.get("rule_pattern_mode", "contains_merchant")
+        merchant_guess = normalize_merchant(base_description)
+        if rule_mode == "exact_description":
+            pattern, match_type = base_description, "exact"
+        elif rule_mode == "custom_pattern":
+            pattern = request.form.get("rule_pattern", "")
+            match_type = request.form.get("rule_match_type", "contains")
+        else:
+            pattern, match_type = merchant_guess, "contains"
+
+        create_rule_from_review(
+            database=database,
+            pattern=pattern,
+            match_type=match_type,
+            category_id=category_id,
+            transaction_class=transaction_class,
+            priority=int(request.form.get("rule_priority") or 1000),
+            notes=f"Created from bulk review of {len(transaction_ids)} transaction(s).",
+        )
+        if request.form.get("apply_to_matching") and transaction_ids:
+            backfill_count = _apply_rule_to_existing_queue(
+                database, pattern, match_type, category_id, transaction_class, transaction_ids[0]
+            )
+
+    database.commit()
+
+    if request.form.get("create_rule"):
+        extra = f" Also cleared {backfill_count} other matching transaction(s)." if backfill_count else ""
+        flash(f"Applied to {len(transaction_ids)} transaction(s). Rule created.{extra}", "success")
+    else:
+        flash(f"Applied to {len(transaction_ids)} transaction(s).", "success")
+
+    filter_state = _read_review_filter_state({
+        "account_id": request.form.get("next_account_id", ""),
+        "transaction_class": request.form.get("next_transaction_class", ""),
+        "search": request.form.get("next_search", ""),
+        "only_zelle": request.form.get("next_only_zelle", "0"),
+        "limit": request.form.get("next_limit", "25"),
+        "page": request.form.get("next_page", "1"),
+        "scroll_y": "",
+    })
+    return redirect(url_for("moneyview.review_queue", **_build_review_redirect_params(filter_state)))
+
+
+@bp.route("/budgets", methods=["GET", "POST"])
+def budgets_page() -> str:
+    database = get_db()
+    today = _date.today()
+
+    if request.method == "POST":
+        valid_ids = {r["id"] for r in database.execute("select id from categories where active = 1").fetchall()}
+        for cat_id in valid_ids:
+            raw = request.form.get(f"budget_{cat_id}", "").strip()
+            if not raw:
+                database.execute("delete from category_budgets where category_id = ?", (cat_id,))
+                continue
+            try:
+                amount = Decimal(raw)
+            except InvalidOperation:
+                continue
+            if amount > 0:
+                database.execute(
+                    """
+                    insert into category_budgets (category_id, monthly_limit)
+                    values (?, ?)
+                    on conflict(category_id) do update set monthly_limit = excluded.monthly_limit, updated_at = current_timestamp
+                    """,
+                    (cat_id, float(amount)),
+                )
+            else:
+                database.execute("delete from category_budgets where category_id = ?", (cat_id,))
+        database.commit()
+        flash("Budgets saved.", "success")
+        return redirect(url_for("moneyview.budgets_page"))
+
+    rows = budget_vs_actual(database, today.year, today.month)
+    return render_template("budgets.html", rows=rows, month=today.strftime("%B %Y"))
 
 
 @bp.post("/review/<transaction_id>")

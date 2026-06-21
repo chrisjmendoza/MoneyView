@@ -2,6 +2,16 @@
 
 Daily running journal of work completed on MoneyView.
 
+## 2026-06-20 (session 4)
+
+### Stuff Done
+- Added CSRF protection to all POST forms. A random 32-byte token is generated into the Flask session on first page load, exposed as a `<meta name="csrf-token">` tag, and injected into every POST form automatically via a one-time JS pass at page load — no template edits required. All POST requests are rejected with 403 if the token is missing or wrong. CSRF is bypassed in the test environment (`app.testing`).
+- Added `/budgets` — a monthly budget-vs-actual page. Each active category with spending or a saved budget appears with its current-month actual spend, an editable budget field, and a visual progress bar. Over-budget rows are highlighted in amber. Budgets are stored in a new `category_budgets` table (FK to categories, CASCADE delete). Added Budgets to the site nav.
+- Added annual spending projection to the dashboard. `compute_annual_projection()` averages the last 3 months of net expense and multiplies by 12. Displayed as a card above the 3-month trend table.
+- Added per-category spending sparklines to the dashboard top-10 categories table. `spending_trend_by_category_month()` returns monthly spend per category for the last 3 months; the template renders 3 proportionally-sized bars as inline SVG-free HTML using CSS custom properties for height (same approach as the confidence meter).
+- Fixed VS Code Problems tab: replaced the only Jinja2 expression inside a `<script>` block (`{{ restored_scroll_y or 'null' }}`) with a `data-scroll-y` attribute on the section element, read in JS via `.dataset.scrollY`.
+- Rewrote the review queue with merchant grouping and collapsible cards. Transactions with the same merchant are automatically grouped into a single card showing the total and a mini transaction list; one "Categorize all N" bulk form applies category, class, note, and an optional rule to the entire group. "Ungroup" reveals individual collapsible cards for each transaction in the group (useful for PayPal or mixed-purpose merchants). "Back to group view" re-groups them. All individual cards (both standalone and within groups) use `<details>/<summary>` for collapse — the summary line shows date, amount, merchant/description, and badges; the full decision form is revealed on click.
+
 ## 2026-06-20 (session 3)
 
 ### Stuff Done

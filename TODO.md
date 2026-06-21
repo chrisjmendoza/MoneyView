@@ -31,14 +31,14 @@ Generated from multi-perspective analysis (user / developer / engineer / financi
 
 ## Tier 4 — Security
 
-- [ ] CSRF token on all POST forms (Flask session-based token, no external dep required)
+- [x] CSRF token on all POST forms — token generated into session, injected via JS meta-tag at page load, validated on every POST (skipped in test mode)
 - [x] Input validation on `/settings` POST — date format and decimal fields validated before DB write
 - [x] Size cap on `/import` CSV upload — `MAX_CONTENT_LENGTH = 10 MB` with flash error on 413
 
 ## Tier 5 — Growth Features (Post-MVP)
 
-- [ ] Budget vs. actual per category (set monthly target, track vs. real spend)
+- [x] Budget vs. actual per category — `/budgets` page shows current-month actual vs. monthly target with progress bars; budgets are saved per category; categories without transactions but with budgets are shown
 - [x] Net worth snapshot on dashboard — assets minus liabilities from latest balance snapshots
-- [ ] Annual projections from current pay-period rate
-- [ ] Spending trend sparklines per category
+- [x] Annual projections from current pay-period rate — 3-month average expense extrapolated × 12, shown on dashboard
+- [x] Spending trend sparklines per category — 3-month mini bar chart next to each category in the top-10 table
 - [x] Export filtered transactions to CSV — `/transactions/export` respects all active filters

@@ -69,6 +69,16 @@ def ensure_integrity_columns(database: sqlite3.Connection) -> None:
 def ensure_support_tables(database: sqlite3.Connection) -> None:
         database.execute(
                 """
+                create table if not exists category_budgets (
+                    category_id text primary key references categories(id) on delete cascade,
+                    monthly_limit real not null default 0,
+                    created_at text not null default current_timestamp,
+                    updated_at text not null default current_timestamp
+                )
+                """
+        )
+        database.execute(
+                """
                 create table if not exists contacts (
                     id text primary key,
                     name text not null,

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-review mb-2">
+
+  <div class="mb-2">
+    <h2 class="section-heading">Monthly Budgets — {{ month }}</h2>
+    <p class="import-lede">Set a monthly spending target per category. Leave a field blank to remove a budget. Progress bars show actual spend vs. budget for the current month.</p>
+  </div>
+
+  <section class="card stack">
+    <form method="post" action="/budgets">
+      <table class="table-compact">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Spent</th>
+            <th>Budget ($)</th>
+            <th>Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr class="{% if row.pct and row.pct > 100 %}budget-row-over{% endif %}">
+              <td>{{ row.category_name }}</td>
+              <td class="nowrap">${{ "%.2f"|format(row.actual) }}</td>
+              <td>
+                <input
+                  type="number"
+                  name="budget_{{ row.category_id }}"
+                  value="{{ "%.2f"|format(row.budget) if row.budget > 0 else '' }}"
+                  step="0.01"
+                  min="0"
+                  placeholder="No budget"
+                  class="input-narrow"
+                >
+              </td>
+              <td>
+                {% if row.pct is not none %}
+                  <div class="flex-row-sm">
+                    <div class="budget-bar-track">
+                      <div class="budget-bar-fill {% if row.pct > 100 %}over-budget{% endif %}" style="--pct: {{ [row.pct, 100] | min | round | int }}%"></div>
+                    </div>
+                    <span class="meta-text {% if row.pct > 100 %}warning{% endif %}">{{ row.pct | round | int }}%</span>
+                  </div>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="4" class="empty-cell">No spending categories with transactions or budgets this month.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div class="row-between mt-1">
+        <p class="muted pagination-meta">Categories with spending this month or an existing budget are shown.</p>
+        <button type="submit" class="btn-action">Save Budgets</button>
+      </div>
+    </form>
+  </section>
+
+</div>
+{% endblock %}
