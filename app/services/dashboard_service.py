@@ -179,11 +179,34 @@ def spending_trend_by_category_month(database: sqlite3.Connection, num_months: i
     return {cat: [month_data.get(m, 0.0) for m in all_months] for cat, month_data in cat_data.items()}
 
 
-def compute_annual_projection(spending_trend: list[dict]) -> Decimal:
-    if not spending_trend:
-        return Decimal("0")
-    total = sum(Decimal(str(r["net_spend"] or 0)) for r in spending_trend)
-    return (total / len(spending_trend)) * 12
+_PAY_PERIODS_PER_YEAR: dict[str, int] = {
+    "biweekly": 26,
+    "weekly": 52,
+    "semimonthly": 24,
+    "monthly": 12,
+}
+
+
+def compute_annual_projection(spending_trend: list[dict], settings: dict) -> dict:
+    paycheck = Decimal(str(settings.get("normal_paycheck_amount", "0") or "0"))
+    periods = _PAY_PERIODS_PER_YEAR.get(settings.get("pay_frequency", "biweekly"), 26)
+    annual_income = paycheck * periods
+
+    if spending_trend:
+        total_expense = sum(Decimal(str(r["net_spend"] or 0)) for r in spending_trend)
+        annual_expense = (total_expense / len(spending_trend)) * 12
+        based_on_months = len(spending_trend)
+    else:
+        annual_expense = Decimal("0")
+        based_on_months = 0
+
+    return {
+        "income": annual_income,
+        "expense": annual_expense,
+        "net": annual_income - annual_expense,
+        "pay_periods": periods,
+        "based_on_months": based_on_months,
+    }
 
 
 def budget_vs_actual(database: sqlite3.Connection, year: int, month: int) -> list[dict]:
@@ -544,7 +567,7 @@ def build_dashboard(database: sqlite3.Connection, today: date | None = None, win
         "all_data_confidence": all_data_confidence,
         "net_worth": compute_net_worth(balances),
         "spending_trend": spending_trend,
-        "annual_projection": compute_annual_projection(spending_trend),
+        "annual_projection": compute_annual_projection(spending_trend, settings),
         "category_sparklines": spending_trend_by_category_month(database),
         "latest_import": latest_import_status(database),
         "top_categories": top_categories,

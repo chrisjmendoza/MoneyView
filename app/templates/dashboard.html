@@ -199,12 +199,30 @@
 
   <section class="card mt-1 page-dashboard">
     <h2 class="section-heading">Annual Projection</h2>
-    <p class="hero-detail">Extrapolated from the average monthly net spend over the last 3 months. Does not filter by the window selector above.</p>
-    {% if dashboard.spending_trend %}
-      <p class="hero-value {% if dashboard.annual_projection < 0 %}negative{% endif %}">${{ "%.2f"|format(dashboard.annual_projection|abs) }}/yr</p>
-      <p class="hero-detail">Based on {{ dashboard.spending_trend | length }} month(s) of expense data.</p>
-    {% else %}
-      <p class="muted">Not enough data for a projection yet.</p>
+    <p class="hero-detail">Income uses your paycheck settings ({{ dashboard.annual_projection.pay_periods }} paychecks/year). Expenses are the 3-month average{% if dashboard.annual_projection.based_on_months %} based on {{ dashboard.annual_projection.based_on_months }} month(s) of data{% endif %} × 12. Neither figure filters by the window selector above.</p>
+    <table class="table-compact mt-1">
+      <tbody>
+        <tr>
+          <td>Projected income</td>
+          <td class="amount-positive">${{ "%.2f"|format(dashboard.annual_projection.income) }}/yr</td>
+        </tr>
+        <tr>
+          <td>Projected expenses</td>
+          <td class="amount-negative">${{ "%.2f"|format(dashboard.annual_projection.expense) }}/yr</td>
+        </tr>
+        <tr>
+          <td><strong>Projected net</strong></td>
+          <td>
+            <strong class="{% if dashboard.annual_projection.net >= 0 %}amount-positive{% else %}amount-negative{% endif %}">
+              {% if dashboard.annual_projection.net >= 0 %}+{% endif %}${{ "%.2f"|format(dashboard.annual_projection.net|abs) }}/yr
+              {% if dashboard.annual_projection.net < 0 %} (deficit){% endif %}
+            </strong>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    {% if dashboard.annual_projection.income == 0 %}
+      <p class="muted">Set your paycheck amount in Pay Settings to see projected income.</p>
     {% endif %}
   </section>
 
